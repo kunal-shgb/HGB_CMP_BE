@@ -14,9 +14,14 @@ public class Complaint : AuditableEntity
     public string? AccountNumber { get; set; }
     public string? PreferredChannel { get; set; }
 
+    // Office the complaint belongs to, as held by the Bank IAM when it was registered.
+    // Organisation master data lives in the IAM; the portal keeps this snapshot for scoping and reporting.
+    public required string BranchCode { get; set; }
+    public required string BranchName { get; set; }
+    public required string RegionCode { get; set; }
+    public required string RegionName { get; set; }
+
     // Classification
-    public Guid BranchId { get; set; }
-    public Branch? Branch { get; set; }
     public Guid CategoryId { get; set; }
     public ComplaintCategory? Category { get; set; }
     public Guid SubCategoryId { get; set; }
@@ -35,9 +40,11 @@ public class Complaint : AuditableEntity
     // Ownership
     public string? AssignedEmployeeId { get; set; }
     public string? AssignedEmployeeName { get; set; }
-    public Guid? AssignedDepartmentId { get; set; }
-    public Department? AssignedDepartment { get; set; }
-    public int EscalationLevel { get; set; } = 1;
+    /// <summary>IAM department code (e.g. "DBD") and its name at the time of assignment.</summary>
+    public string? AssignedDepartmentCode { get; set; }
+    public string? AssignedDepartmentName { get; set; }
+    /// <summary>See <see cref="EscalationLevels"/>. Only ever goes up.</summary>
+    public int EscalationLevel { get; set; } = EscalationLevels.Branch;
 
     // SLA / lifecycle
     public DateTimeOffset? SlaDueDate { get; set; }
@@ -48,6 +55,7 @@ public class Complaint : AuditableEntity
     public List<ComplaintAssignment> Assignments { get; set; } = [];
     public List<ComplaintRemark> Remarks { get; set; } = [];
     public List<ComplaintAttachment> Attachments { get; set; } = [];
+    public List<ComplaintEscalation> Escalations { get; set; } = [];
 }
 
 public class ComplaintStatusHistory : Entity
@@ -68,7 +76,7 @@ public class ComplaintAssignment : Entity
     public string? AssignedFromEmployeeId { get; set; }
     public required string AssignedToEmployeeId { get; set; }
     public string? AssignedToName { get; set; }
-    public Guid? AssignedDepartmentId { get; set; }
+    public string? AssignedDepartmentCode { get; set; }
     public string? Remarks { get; set; }
     public required string AssignedByEmployeeId { get; set; }
     public DateTimeOffset AssignedAt { get; set; }
@@ -90,9 +98,16 @@ public class ComplaintAttachment : Entity
     public required string FileName { get; set; }
     /// <summary>Storage key relative to the configured storage root. Never a web path.</summary>
     public required string StorageKey { get; set; }
+    /// <summary>Content type detected from the file's bytes, never the one the client sent.</summary>
     public required string ContentType { get; set; }
     public long FileSize { get; set; }
+    /// <summary>SHA-256 of the stored bytes (hex), for integrity checks.</summary>
+    public required string Sha256 { get; set; }
+    /// <summary>Result of the malware scan: CLEAN, or NOT_SCANNED while no scanning engine is configured.</summary>
+    public required string ScanStatus { get; set; }
+    /// <summary>Employee code, or "CUSTOMER" for documents lodged with the complaint.</summary>
     public required string UploadedBy { get; set; }
+    public string? UploadedByName { get; set; }
     public DateTimeOffset UploadedAt { get; set; }
 }
 

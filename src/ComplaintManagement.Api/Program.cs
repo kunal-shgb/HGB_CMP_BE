@@ -4,6 +4,7 @@ using ComplaintManagement.Api.Infrastructure;
 using ComplaintManagement.Application;
 using ComplaintManagement.Application.Common;
 using ComplaintManagement.Infrastructure;
+using ComplaintManagement.Infrastructure.IAM.Mock;
 using ComplaintManagement.Infrastructure.Persistence;
 using ComplaintManagement.Infrastructure.Persistence.Seed;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -15,8 +16,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddOptions<SlaOptions>().Bind(builder.Configuration.GetSection(SlaOptions.SectionName)).ValidateOnStart();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment);
-builder.Services.AddCmpAuthentication(builder.Configuration, builder.Environment);
-builder.Services.AddCmpRateLimiting();
+builder.Services.AddCmpAuthentication(builder.Configuration);
+builder.Services.AddCmpRateLimiting(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
@@ -43,7 +44,13 @@ if (app.Environment.IsDevelopment())
     {
         await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
     }
-    if (app.Configuration.GetValue<bool>("DevAuth:Enabled")) await DevDataSeeder.SeedAsync(app.Services);
+}
+
+// Temporary dummy users (mock IAM): create the schema and seed users. Refused in Production at startup.
+if (app.Configuration.GetValue<bool>("MockIam:Enabled"))
+{
+    await MockIamSetup.EnsureAsync(app.Services);
+    if (app.Environment.IsDevelopment()) await DevDataSeeder.SeedAsync(app.Services);
 }
 else
 {

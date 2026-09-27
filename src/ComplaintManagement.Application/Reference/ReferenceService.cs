@@ -14,7 +14,7 @@ public interface IReferenceService
     Task<IReadOnlyList<DepartmentResponse>> DepartmentsAsync(CancellationToken ct);
 }
 
-public sealed class ReferenceService(IApplicationDbContext db) : IReferenceService
+public sealed class ReferenceService(IApplicationDbContext db, IIamOrganisationService org) : IReferenceService
 {
     public async Task<IReadOnlyList<CategoryResponse>> CategoriesAsync(CancellationToken ct) =>
         await db.Categories.AsNoTracking()
@@ -35,20 +35,19 @@ public sealed class ReferenceService(IApplicationDbContext db) : IReferenceServi
             .Select(p => new PriorityResponse(p.Code, p.Name, p.Rank))
             .ToListAsync(ct);
 
+    // Organisation data comes from the Bank IAM (cached), not from portal tables.
+
     public async Task<IReadOnlyList<RegionResponse>> RegionsAsync(CancellationToken ct) =>
-        await db.Regions.AsNoTracking().Where(r => r.IsActive).OrderBy(r => r.Name)
-            .Select(r => new RegionResponse(r.Code, r.Name))
-            .ToListAsync(ct);
+        (await org.GetRegionsAsync(ct)).Where(r => r.IsActive).OrderBy(r => r.Name)
+            .Select(r => new RegionResponse(r.Code, r.Name)).ToList();
 
     public async Task<IReadOnlyList<BranchResponse>> BranchesAsync(string? regionCode, CancellationToken ct) =>
-        await db.Branches.AsNoTracking()
-            .Where(b => b.IsActive && (regionCode == null || b.Region!.Code == regionCode))
+        (await org.GetBranchesAsync(ct))
+            .Where(b => b.IsActive && (regionCode == null || string.Equals(b.RegionCode, regionCode, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(b => b.Name)
-            .Select(b => new BranchResponse(b.Code, b.Name, b.Region!.Code))
-            .ToListAsync(ct);
+            .Select(b => new BranchResponse(b.Code, b.Name, b.RegionCode)).ToList();
 
     public async Task<IReadOnlyList<DepartmentResponse>> DepartmentsAsync(CancellationToken ct) =>
-        await db.Departments.AsNoTracking().Where(d => d.IsActive).OrderBy(d => d.Name)
-            .Select(d => new DepartmentResponse(d.Code, d.Name))
-            .ToListAsync(ct);
+        (await org.GetDepartmentsAsync(ct)).Where(d => d.IsActive).OrderBy(d => d.Name)
+            .Select(d => new DepartmentResponse(d.Code, d.Name)).ToList();
 }

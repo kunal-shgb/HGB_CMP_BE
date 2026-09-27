@@ -5,6 +5,8 @@ public sealed record DashboardSummary(
     int Pending,
     int Overdue,
     int DueSoon,
+    /// <summary>Open complaints escalated to Regional Office or Head Office.</summary>
+    int Escalated,
     IReadOnlyList<StatusCount> ByStatus,
     IReadOnlyList<DailyCount> DailyTrend,
     IReadOnlyList<NamedCount> ByCategory,

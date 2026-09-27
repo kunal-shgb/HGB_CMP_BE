@@ -7,7 +7,7 @@ public sealed record PriorityResponse(string Code, string Name, int Rank);
 public sealed record RegionResponse(string Code, string Name);
 public sealed record BranchResponse(string Code, string Name, string RegionCode);
 public sealed record DepartmentResponse(string Code, string Name);
-public sealed record EmployeeResponse(string EmployeeId, string Name, string? Designation, string? BranchCode, string? RegionCode, string? DepartmentCode);
+public sealed record EmployeeResponse(string EmployeeId, string Name, string? Designation, string? OfficeType, string? OfficeCode, string? OfficeName, string? DepartmentName);
 
 /// <summary>The signed-in staff member as the portal sees them.</summary>
 public sealed record CurrentUserResponse(
@@ -16,7 +16,15 @@ public sealed record CurrentUserResponse(
     string? Designation,
     IReadOnlyList<string> Roles,
     IReadOnlyList<string> Permissions,
-    string ScopeLevel,
-    string? RegionCode,
-    string? BranchCode,
-    string? DepartmentCode);
+    /// <summary>HeadOffice, Region or Branch; null when the office type is not recognised.</summary>
+    string? ScopeLevel,
+    string? OfficeType,
+    string? OfficeCode,
+    string? OfficeName,
+    string? DepartmentName);
+
+/// <summary>Options for the public complaint form. Contains no internal configuration such as TAT.</summary>
+public sealed record PublicFormOptions(IReadOnlyList<PublicCategory> Categories, IReadOnlyList<PublicBranch> Branches);
+public sealed record PublicCategory(string Code, string Name, string Group, IReadOnlyList<PublicSubCategory> SubCategories);
+public sealed record PublicSubCategory(string Code, string Name);
+public sealed record PublicBranch(string Code, string Name, string RegionName);

@@ -2,6 +2,7 @@ using ComplaintManagement.Application.Common;
 using ComplaintManagement.Application.Common.Interfaces;
 using ComplaintManagement.Application.Common.Security;
 using ComplaintManagement.Contracts.Responses;
+using ComplaintManagement.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -43,6 +44,7 @@ public sealed class DashboardService(
         var pending = await open.CountAsync(ct);
         var overdue = await open.CountAsync(c => c.SlaDueDate != null && c.SlaDueDate < now, ct);
         var dueSoon = await open.CountAsync(c => c.SlaDueDate != null && c.SlaDueDate >= now && c.SlaDueDate <= dueSoonLimit, ct);
+        var escalated = await open.CountAsync(c => c.EscalationLevel > EscalationLevels.Branch, ct);
 
         // Trend is grouped by IST calendar day in memory; the window is bounded to at most 90 days.
         var since = IstDate.StartOfDayUtc(IstDate.ToIstDate(now).AddDays(-(trendDays - 1)));
@@ -59,7 +61,7 @@ public sealed class DashboardService(
             .OrderByDescending(g => g.Count())
             .Select(g => new NamedCount(g.Key.Code, g.Key.Name, g.Count()))
             .ToListAsync(ct);
-        var byRegion = await scoped.GroupBy(c => new { c.Branch!.Region!.Code, c.Branch.Region.Name })
+        var byRegion = await scoped.GroupBy(c => new { Code = c.RegionCode, Name = c.RegionName })
             .OrderByDescending(g => g.Count())
             .Select(g => new NamedCount(g.Key.Code, g.Key.Name, g.Count()))
             .ToListAsync(ct);
@@ -72,6 +74,6 @@ public sealed class DashboardService(
                 return age >= b.From && age <= b.To;
             }))).ToList();
 
-        return new DashboardSummary(total, pending, overdue, dueSoon, byStatus, trend, byCategory, byRegion, ageing);
+        return new DashboardSummary(total, pending, overdue, dueSoon, escalated, byStatus, trend, byCategory, byRegion, ageing);
     }
 }

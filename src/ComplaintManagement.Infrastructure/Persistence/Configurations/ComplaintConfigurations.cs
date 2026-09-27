@@ -25,18 +25,23 @@ internal sealed class ComplaintConfiguration : IEntityTypeConfiguration<Complain
         b.Property(x => x.StatusCode).HasMaxLength(40);
         b.Property(x => x.AssignedEmployeeId).HasMaxLength(32);
         b.Property(x => x.AssignedEmployeeName).HasMaxLength(150);
+        b.Property(x => x.BranchCode).HasMaxLength(32);
+        b.Property(x => x.BranchName).HasMaxLength(150);
+        b.Property(x => x.RegionCode).HasMaxLength(32);
+        b.Property(x => x.RegionName).HasMaxLength(150);
+        b.Property(x => x.AssignedDepartmentCode).HasMaxLength(50);
+        b.Property(x => x.AssignedDepartmentName).HasMaxLength(150);
 
-        b.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.SubCategory).WithMany().HasForeignKey(x => x.SubCategoryId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusCode).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Priority).WithMany().HasForeignKey(x => x.PriorityCode).OnDelete(DeleteBehavior.Restrict);
-        b.HasOne(x => x.AssignedDepartment).WithMany().HasForeignKey(x => x.AssignedDepartmentId).OnDelete(DeleteBehavior.Restrict);
 
         b.HasMany(x => x.StatusHistory).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Assignments).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Remarks).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Attachments).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(x => x.Escalations).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
 
         b.HasIndex(x => x.CreatedAt);
         b.HasIndex(x => x.StatusCode);
@@ -44,7 +49,11 @@ internal sealed class ComplaintConfiguration : IEntityTypeConfiguration<Complain
         b.HasIndex(x => x.AccountNumber);
         b.HasIndex(x => x.TransactionId);
         b.HasIndex(x => x.AssignedEmployeeId);
+        b.HasIndex(x => x.BranchCode);
+        b.HasIndex(x => x.RegionCode);
+        b.HasIndex(x => x.AssignedDepartmentCode);
         b.HasIndex(x => new { x.ClosedAt, x.SlaDueDate });
+        b.HasIndex(x => x.EscalationLevel);
     }
 }
 
@@ -72,7 +81,7 @@ internal sealed class ComplaintAssignmentConfiguration : IEntityTypeConfiguratio
         b.Property(x => x.AssignedToName).HasMaxLength(150);
         b.Property(x => x.AssignedByEmployeeId).HasMaxLength(32);
         b.Property(x => x.Remarks).HasMaxLength(4000);
-        b.HasOne<Department>().WithMany().HasForeignKey(x => x.AssignedDepartmentId).OnDelete(DeleteBehavior.Restrict);
+        b.Property(x => x.AssignedDepartmentCode).HasMaxLength(50);
         b.HasIndex(x => new { x.ComplaintId, x.AssignedAt });
     }
 }
@@ -99,6 +108,10 @@ internal sealed class ComplaintAttachmentConfiguration : IEntityTypeConfiguratio
         b.Property(x => x.StorageKey).HasMaxLength(512);
         b.Property(x => x.ContentType).HasMaxLength(128);
         b.Property(x => x.UploadedBy).HasMaxLength(32);
+        b.Property(x => x.UploadedByName).HasMaxLength(150);
+        b.Property(x => x.Sha256).HasMaxLength(64);
+        b.Property(x => x.ScanStatus).HasMaxLength(16);
+        b.HasIndex(x => x.ComplaintId);
     }
 }
 
@@ -117,6 +130,79 @@ internal sealed class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         b.HasIndex(x => x.CreatedAt);
         b.HasIndex(x => new { x.Module, x.RecordId });
         b.HasIndex(x => x.EmployeeId);
+    }
+}
+
+internal sealed class ComplaintApprovalConfiguration : IEntityTypeConfiguration<ComplaintApproval>
+{
+    public void Configure(EntityTypeBuilder<ComplaintApproval> b)
+    {
+        b.ToTable("complaint_approvals");
+        b.HasOne(x => x.Complaint).WithMany().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
+        b.Property(x => x.RequestedStatusCode).HasMaxLength(40);
+        b.Property(x => x.PreviousStatusCode).HasMaxLength(40);
+        b.Property(x => x.MakerRemarks).HasMaxLength(4000);
+        b.Property(x => x.RequestedByEmployeeId).HasMaxLength(32);
+        b.Property(x => x.RequestedByName).HasMaxLength(150);
+        b.Property(x => x.RequestedByOfficeName).HasMaxLength(150);
+        b.Property(x => x.ApproverLevel).HasConversion<string>().HasMaxLength(16);
+        b.Property(x => x.ApproverOfficeCode).HasMaxLength(32);
+        b.Property(x => x.ApproverDepartment).HasMaxLength(50);
+        b.Property(x => x.Status).HasConversion<string>().HasMaxLength(16);
+        b.Property(x => x.DecidedByEmployeeId).HasMaxLength(32);
+        b.Property(x => x.DecidedByName).HasMaxLength(150);
+        b.Property(x => x.DecisionRemarks).HasMaxLength(4000);
+        // Maps to PostgreSQL's xmin system column: optimistic concurrency between Checkers.
+        b.Property(x => x.Version).HasColumnName("xmin").HasColumnType("xid").IsRowVersion();
+        b.HasOne<ComplaintStatus>().WithMany().HasForeignKey(x => x.RequestedStatusCode).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<ComplaintStatus>().WithMany().HasForeignKey(x => x.PreviousStatusCode).OnDelete(DeleteBehavior.Restrict);
+
+        // At most one open request per complaint.
+        b.HasIndex(x => x.ComplaintId).IsUnique().HasFilter("status = 'Pending'").HasDatabaseName("ux_complaint_approvals_one_pending");
+        b.HasIndex(x => new { x.Status, x.ApproverLevel, x.ApproverOfficeCode });
+    }
+}
+
+internal sealed class ComplaintEscalationConfiguration : IEntityTypeConfiguration<ComplaintEscalation>
+{
+    public void Configure(EntityTypeBuilder<ComplaintEscalation> b)
+    {
+        b.ToTable("complaint_escalations");
+        b.Property(x => x.Reason).HasMaxLength(4000);
+        b.Property(x => x.EscalatedBy).HasMaxLength(32);
+        b.Property(x => x.EscalatedByName).HasMaxLength(150);
+        b.HasIndex(x => new { x.ComplaintId, x.EscalatedAt });
+    }
+}
+
+internal sealed class NotificationConfiguration : IEntityTypeConfiguration<Notification>
+{
+    public void Configure(EntityTypeBuilder<Notification> b)
+    {
+        b.ToTable("notification_outbox");
+        b.Property(x => x.Event).HasMaxLength(32);
+        b.Property(x => x.Channel).HasMaxLength(8);
+        b.Property(x => x.Recipient).HasMaxLength(254);
+        b.Property(x => x.Subject).HasMaxLength(200);
+        b.Property(x => x.Body).HasMaxLength(2000);
+        b.Property(x => x.Status).HasMaxLength(16);
+        b.Property(x => x.LastError).HasMaxLength(500);
+        b.Property(x => x.ProviderReference).HasMaxLength(100);
+        b.HasOne<Complaint>().WithMany().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => new { x.Status, x.NextAttemptAt });
+        b.HasIndex(x => x.ComplaintId);
+    }
+}
+
+internal sealed class TrackingOtpConfiguration : IEntityTypeConfiguration<TrackingOtp>
+{
+    public void Configure(EntityTypeBuilder<TrackingOtp> b)
+    {
+        b.ToTable("tracking_otps");
+        b.Property(x => x.CodeHash).HasMaxLength(64);
+        b.Property(x => x.Salt).HasMaxLength(32);
+        b.HasOne<Complaint>().WithMany().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
+        b.HasIndex(x => new { x.ComplaintId, x.CreatedAt });
     }
 }
 

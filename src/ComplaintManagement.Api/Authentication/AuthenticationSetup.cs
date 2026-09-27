@@ -1,36 +1,51 @@
 using ComplaintManagement.Application.Common.Interfaces;
 using ComplaintManagement.Application.Common.Security;
-using ComplaintManagement.Infrastructure.IAM;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 
 namespace ComplaintManagement.Api.Authentication;
 
 public static class AuthenticationSetup
 {
-    public static IServiceCollection AddCmpAuthentication(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
+    public static IServiceCollection AddCmpAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        var devAuthEnabled = configuration.GetValue<bool>($"{DevIdentityOptions.SectionName}:Enabled");
-        if (devAuthEnabled && !environment.IsDevelopment())
-            throw new InvalidOperationException("DevAuth is enabled outside Development. Refusing to start.");
+        services.AddOptions<PortalTokenOptions>()
+            .Bind(configuration.GetSection(PortalTokenOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<PortalTokenIssuer>();
 
-        if (devAuthEnabled)
-        {
-            services.AddAuthentication(DevAuthenticationHandler.SchemeName)
-                .AddScheme<AuthenticationSchemeOptions, DevAuthenticationHandler>(DevAuthenticationHandler.SchemeName, _ => { });
-        }
-        else
-        {
-            // Bank IAM token validation is registered here once the IAM protocol is confirmed
-            // (OIDC/JWT bearer, SAML or a Bank-specific API). Until then every staff call is rejected.
-            services.AddAuthentication("Unconfigured")
-                .AddScheme<AuthenticationSchemeOptions, UnconfiguredAuthenticationHandler>("Unconfigured", _ => { });
-        }
+        services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
+        services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+            .Configure<IOptions<PortalTokenOptions>>((jwt, tokenOptions) =>
+            {
+                var o = tokenOptions.Value;
+                jwt.MapInboundClaims = false;
+                jwt.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidIssuer = o.Issuer,
+                    ValidAudience = o.Audience,
+                    IssuerSigningKey = PortalTokenIssuer.SigningKey(o),
+                    ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    RequireExpirationTime = true,
+                    ClockSkew = TimeSpan.FromMinutes(1),
+                    NameClaimType = CmpClaimTypes.Name,
+                    RoleClaimType = CmpClaimTypes.AppRole,
+                };
+            });
 
         services.AddHttpContextAccessor();
         services.AddMemoryCache();
         services.AddScoped<IClaimsTransformation, RoleMappingClaimsTransformation>();
         services.AddScoped<ICurrentUser, HttpCurrentUser>();
+        services.AddOptions<OfficeScopeOptions>().Bind(configuration.GetSection(OfficeScopeOptions.SectionName));
 
         services.AddAuthorizationBuilder()
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
@@ -48,13 +63,4 @@ public static class AuthenticationSetup
 
         return services;
     }
-}
-
-/// <summary>Rejects every request until real IAM validation is wired in.</summary>
-internal sealed class UnconfiguredAuthenticationHandler(
-    Microsoft.Extensions.Options.IOptionsMonitor<AuthenticationSchemeOptions> options,
-    ILoggerFactory logger,
-    System.Text.Encodings.Web.UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
-{
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync() => Task.FromResult(AuthenticateResult.NoResult());
 }

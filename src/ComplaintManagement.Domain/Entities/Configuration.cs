@@ -22,8 +22,8 @@ public class ComplaintSubCategory : AuditableEntity
     public ComplaintCategory? Category { get; set; }
     /// <summary>Turn-around time in calendar days. Null until the Bank fixes SLA values.</summary>
     public int? TatDays { get; set; }
-    /// <summary>Department that should own complaints of this type by default, if any.</summary>
-    public Guid? DefaultDepartmentId { get; set; }
+    /// <summary>IAM department code that should own complaints of this type by default, if any.</summary>
+    public string? DefaultDepartmentCode { get; set; }
     public string? DefaultPriorityCode { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
@@ -43,6 +43,8 @@ public class ComplaintStatus
     public bool IsResolution { get; set; }
     /// <summary>Status the complaint moves to when it is assigned, if the workflow allows it.</summary>
     public bool IsAssignment { get; set; }
+    /// <summary>Status held while a Maker's decision waits for a Checker.</summary>
+    public bool IsApprovalPending { get; set; }
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 }
@@ -55,6 +57,8 @@ public class ComplaintStatusTransition
     public required string ToStatusCode { get; set; }
     /// <summary>When true the user must supply a remark to make this move.</summary>
     public bool RequiresRemark { get; set; }
+    /// <summary>When true a Maker's request goes to a Checker, and the move happens only when approved.</summary>
+    public bool RequiresApproval { get; set; }
     public bool IsActive { get; set; } = true;
 }
 
@@ -67,10 +71,14 @@ public class ComplaintPriority
     public bool IsActive { get; set; } = true;
 }
 
-/// <summary>Maps a Bank IAM role name to an application role.</summary>
+/// <summary>
+/// Maps a Bank IAM access role (e.g. "Maker") to an application role. When OfficeType is set the
+/// row applies only to users of that office type, so a Branch Maker and an RO Maker can differ.
+/// </summary>
 public class ApplicationRoleMapping : AuditableEntity
 {
     public required string IamRole { get; set; }
+    public string? OfficeType { get; set; }
     public required string ApplicationRole { get; set; }
     public bool IsActive { get; set; } = true;
 }

@@ -5,40 +5,6 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ComplaintManagement.Infrastructure.Persistence.Configurations;
 
-internal sealed class RegionConfiguration : IEntityTypeConfiguration<Region>
-{
-    public void Configure(EntityTypeBuilder<Region> b)
-    {
-        b.ToTable("regions");
-        b.Property(x => x.Code).HasMaxLength(32);
-        b.Property(x => x.Name).HasMaxLength(150);
-        b.HasIndex(x => x.Code).IsUnique();
-        b.HasMany(x => x.Branches).WithOne(x => x.Region).HasForeignKey(x => x.RegionId).OnDelete(DeleteBehavior.Restrict);
-    }
-}
-
-internal sealed class BranchConfiguration : IEntityTypeConfiguration<Branch>
-{
-    public void Configure(EntityTypeBuilder<Branch> b)
-    {
-        b.ToTable("branches");
-        b.Property(x => x.Code).HasMaxLength(32);
-        b.Property(x => x.Name).HasMaxLength(150);
-        b.HasIndex(x => x.Code).IsUnique();
-    }
-}
-
-internal sealed class DepartmentConfiguration : IEntityTypeConfiguration<Department>
-{
-    public void Configure(EntityTypeBuilder<Department> b)
-    {
-        b.ToTable("departments");
-        b.Property(x => x.Code).HasMaxLength(32);
-        b.Property(x => x.Name).HasMaxLength(150);
-        b.HasIndex(x => x.Code).IsUnique();
-    }
-}
-
 internal sealed class CategoryConfiguration : IEntityTypeConfiguration<ComplaintCategory>
 {
     public void Configure(EntityTypeBuilder<ComplaintCategory> b)
@@ -63,7 +29,7 @@ internal sealed class SubCategoryConfiguration : IEntityTypeConfiguration<Compla
         b.Property(x => x.Name).HasMaxLength(150);
         b.Property(x => x.DefaultPriorityCode).HasMaxLength(40);
         b.HasIndex(x => new { x.CategoryId, x.Code }).IsUnique();
-        b.HasOne<Department>().WithMany().HasForeignKey(x => x.DefaultDepartmentId).OnDelete(DeleteBehavior.Restrict);
+        b.Property(x => x.DefaultDepartmentCode).HasMaxLength(50);
         b.HasOne<ComplaintPriority>().WithMany().HasForeignKey(x => x.DefaultPriorityCode).OnDelete(DeleteBehavior.Restrict);
         b.HasData(ReferenceSeed.SubCategories);
     }
@@ -114,7 +80,22 @@ internal sealed class RoleMappingConfiguration : IEntityTypeConfiguration<Applic
     {
         b.ToTable("application_role_mapping");
         b.Property(x => x.IamRole).HasMaxLength(100);
+        b.Property(x => x.OfficeType).HasMaxLength(50);
         b.Property(x => x.ApplicationRole).HasMaxLength(50);
-        b.HasIndex(x => new { x.IamRole, x.ApplicationRole }).IsUnique();
+        b.HasIndex(x => new { x.IamRole, x.OfficeType, x.ApplicationRole }).IsUnique().AreNullsDistinct(false);
+        b.HasData(ReferenceSeed.RoleMappings);
+    }
+}
+
+internal sealed class AppSettingConfiguration : IEntityTypeConfiguration<AppSetting>
+{
+    public void Configure(EntityTypeBuilder<AppSetting> b)
+    {
+        b.ToTable("app_settings");
+        b.HasKey(x => x.Key);
+        b.Property(x => x.Key).HasMaxLength(100);
+        b.Property(x => x.Value).HasMaxLength(1000);
+        b.Property(x => x.UpdatedBy).HasMaxLength(32);
+        b.HasData(ReferenceSeed.Settings);
     }
 }

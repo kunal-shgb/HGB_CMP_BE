@@ -16,7 +16,12 @@ internal static class SnakeCaseNaming
 
             var storeObject = StoreObjectIdentifier.Table(entity.GetTableName()!, entity.GetSchema());
             foreach (var property in entity.GetProperties())
-                property.SetColumnName(ToSnake(property.GetColumnName(storeObject) ?? property.Name));
+            {
+                var column = property.GetColumnName(storeObject) ?? property.Name;
+                // PostgreSQL system columns (xmin concurrency tokens) keep their exact name.
+                if (column == "xmin") continue;
+                property.SetColumnName(ToSnake(column));
+            }
             foreach (var key in entity.GetKeys())
                 key.SetName(ToSnake(key.GetName()!));
             foreach (var fk in entity.GetForeignKeys())

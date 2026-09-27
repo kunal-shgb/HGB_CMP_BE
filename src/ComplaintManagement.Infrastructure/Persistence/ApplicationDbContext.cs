@@ -18,11 +18,13 @@ public sealed class ApplicationDbContext(DbContextOptions<ApplicationDbContext> 
     public DbSet<ComplaintStatus> Statuses => Set<ComplaintStatus>();
     public DbSet<ComplaintStatusTransition> StatusTransitions => Set<ComplaintStatusTransition>();
     public DbSet<ComplaintPriority> Priorities => Set<ComplaintPriority>();
-    public DbSet<Region> Regions => Set<Region>();
-    public DbSet<Branch> Branches => Set<Branch>();
-    public DbSet<Department> Departments => Set<Department>();
     public DbSet<ApplicationRoleMapping> ApplicationRoleMappings => Set<ApplicationRoleMapping>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<ComplaintApproval> ComplaintApprovals => Set<ComplaintApproval>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
+    public DbSet<ComplaintEscalation> ComplaintEscalations => Set<ComplaintEscalation>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<TrackingOtp> TrackingOtps => Set<TrackingOtp>();
     public DbSet<ComplaintNumberSequence> ComplaintNumberSequences => Set<ComplaintNumberSequence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

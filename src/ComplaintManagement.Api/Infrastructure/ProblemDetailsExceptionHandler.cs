@@ -1,4 +1,5 @@
 using ComplaintManagement.Application.Common.Exceptions;
+using ComplaintManagement.Application.Common.Interfaces;
 using ComplaintManagement.Domain.Common;
 using FluentValidation;
 using Microsoft.AspNetCore.Diagnostics;
@@ -27,6 +28,11 @@ public sealed class ProblemDetailsExceptionHandler(IProblemDetailsService proble
                 Status = StatusCodes.Status422UnprocessableEntity,
                 Title = de.Message,
                 Extensions = { ["code"] = de.Code },
+            },
+            IamUnavailableException => new()
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "The Bank sign-in service is not available right now. Please try again shortly.",
             },
             _ => new() { Status = StatusCodes.Status500InternalServerError, Title = "We could not process this request. Please try again." },
         };

@@ -15,6 +15,14 @@ public static class Masking
 
     public static string Identifier(string value) => MaskKeepLast(value, 4, 'X');
 
+    /// <summary>"r***@example.com": first letter of the mailbox and the domain.</summary>
+    public static string Email(string value)
+    {
+        var at = value.IndexOf('@');
+        if (at <= 0) return "***";
+        return $"{value[0]}***{value[at..]}";
+    }
+
     private static string MaskKeepLast(string value, int keep, char mask)
     {
         var trimmed = value.Trim();

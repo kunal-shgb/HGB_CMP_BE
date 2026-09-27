@@ -2,43 +2,19 @@ using ComplaintManagement.Application.Common;
 using ComplaintManagement.Domain.Entities;
 using ComplaintManagement.Domain.Enums;
 using ComplaintManagement.Domain.ValueObjects;
-using ComplaintManagement.Infrastructure.IAM;
+using ComplaintManagement.Infrastructure.IAM.Mock;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace ComplaintManagement.Infrastructure.Persistence.Seed;
 
 /// <summary>
-/// Sample organisation, role mappings and complaints for local development. Runs only in
+/// Sample complaints for local development. Runs only in
 /// Development and only against an empty database. None of this is real Bank data.
 /// </summary>
 public static class DevDataSeeder
 {
-    private static readonly (string Code, string Name, (string Code, string Name)[] Branches)[] Regions =
-    [
-        ("RO-ROH", "Regional Office Rohtak", [("BR-ROH-001", "Rohtak Main"), ("BR-ROH-002", "Sampla"), ("BR-ROH-003", "Meham")]),
-        ("RO-HSR", "Regional Office Hisar", [("BR-HSR-001", "Hisar City"), ("BR-HSR-002", "Hansi"), ("BR-HSR-003", "Barwala")]),
-        ("RO-KNL", "Regional Office Karnal", [("BR-KNL-001", "Karnal Sector 12"), ("BR-KNL-002", "Assandh"), ("BR-KNL-003", "Nilokheri")]),
-        ("RO-RWR", "Regional Office Rewari", [("BR-RWR-001", "Rewari Main"), ("BR-RWR-002", "Bawal")]),
-    ];
-
-    private static readonly (string Code, string Name)[] Departments =
-    [
-        ("DBD", "Digital Banking Division"),
-        ("CSD", "Customer Service Department"),
-        ("CRD", "Credit Department"),
-        ("OPS", "Operations Department"),
-    ];
-
-    private static readonly (string IamRole, string AppRole)[] RoleMappings =
-    [
-        ("CMP_SUPER_ADMIN", "SUPER_ADMIN"), ("CMP_HO_ADMIN", "HO_ADMIN"), ("CMP_HO_DEPT", "HO_DEPARTMENT_USER"),
-        ("CMP_RO_USER", "REGIONAL_OFFICE_USER"), ("CMP_BRANCH_USER", "BRANCH_USER"), ("CMP_NODAL", "NODAL_OFFICER"),
-        ("CMP_MANAGEMENT", "MANAGEMENT"), ("CMP_AUDITOR", "AUDITOR"),
-    ];
-
     private static readonly string[] Names =
     [
         "Ramesh Kumar", "Sunita Devi", "Mahender Singh", "Kavita Rani", "Rajbir Malik", "Pooja Yadav", "Sandeep Hooda",
@@ -62,38 +38,33 @@ public static class DevDataSeeder
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(DevDataSeeder));
-        var devUsers = scope.ServiceProvider.GetRequiredService<IOptions<DevIdentityOptions>>().Value.Users;
+        // Sample assignments use the dummy employees from the mock IAM store.
+        var devUsers = MockIamSeedData.Users;
 
-        if (await db.Regions.AnyAsync(ct)) return;
+        if (await db.Complaints.AnyAsync(ct)) return;
         logger.LogInformation("Seeding development sample data");
 
-        var branches = new List<Branch>();
-        foreach (var (code, name, branchRows) in Regions)
-        {
-            var region = new Region { Code = code, Name = name };
-            db.Regions.Add(region);
-            foreach (var (bCode, bName) in branchRows)
-            {
-                var branch = new Branch { Code = bCode, Name = bName, RegionId = region.Id, Region = region };
-                branches.Add(branch);
-                db.Branches.Add(branch);
-            }
-        }
+        // Offices come from the (mock) IAM organisation data; complaints keep a snapshot of them.
+        var regionNames = MockIamSeedData.Regions.ToDictionary(r => r.Code, r => r.Name);
+        var branches = MockIamSeedData.Branches
+            .Select(b => (b.Code, b.Name, RegionCode: b.RegionCode, RegionName: regionNames[b.RegionCode]))
+            .ToList();
+        var departmentNames = MockIamSeedData.Departments.ToDictionary(d => d.Code, d => d.Name);
 
-        var departments = Departments.Select(d => new Department { Code = d.Code, Name = d.Name }).ToList();
-        db.Departments.AddRange(departments);
-        db.ApplicationRoleMappings.AddRange(RoleMappings.Select(m => new ApplicationRoleMapping { IamRole = m.IamRole, ApplicationRole = m.AppRole }));
+        // Sample: Customer Service Department's Checkers decide Head Office Makers' requests.
+        var hoDept = await db.AppSettings.FirstOrDefaultAsync(x => x.Key == AppSettingKeys.HeadOfficeMakerCheckerDepartment, ct);
+        if (hoDept is not null) { hoDept.Value = "CSD"; hoDept.UpdatedAt = DateTimeOffset.UtcNow; hoDept.UpdatedBy = "SYSTEM"; }
 
         // Sample TAT so SLA states are visible locally. Real TAT values are pending from the Bank.
         var subCategories = await db.SubCategories.Include(s => s.Category).ToListAsync(ct);
         foreach (var sub in subCategories)
         {
             sub.TatDays = sub.Category!.GroupName == "Digital Banking" ? 7 : 15;
-            if (sub.Category.GroupName == "Digital Banking") sub.DefaultDepartmentId = departments[0].Id;
+            if (sub.Category.GroupName == "Digital Banking") sub.DefaultDepartmentCode = "DBD";
         }
 
         var statuses = await db.Statuses.ToDictionaryAsync(s => s.Code, ct);
-        var assignees = devUsers.Where(u => u.BranchCode is not null || u.RegionCode is not null || u.DepartmentCode is not null).ToList();
+        var assignees = devUsers.Where(u => u.IsActive && u.AccessRole == "Maker").ToList();
         var random = new Random(20260924);
         var now = DateTimeOffset.UtcNow;
         var year = IstDate.ToIstDate(now).Year;
@@ -118,7 +89,10 @@ public static class DevDataSeeder
                 CustomerId = $"CIF{random.Next(10_000_000, 99_999_999)}",
                 AccountNumber = $"{random.Next(1000, 9999)}{random.Next(10_000_000, 99_999_999)}",
                 PreferredChannel = random.Next(2) == 0 ? "SMS" : "EMAIL",
-                BranchId = branch.Id,
+                BranchCode = branch.Code,
+                BranchName = branch.Name,
+                RegionCode = branch.RegionCode,
+                RegionName = branch.RegionName,
                 CategoryId = sub.CategoryId,
                 SubCategoryId = sub.Id,
                 PriorityCode = priorities[random.Next(priorities.Length)],
@@ -127,7 +101,8 @@ public static class DevDataSeeder
                 TransactionId = digital ? $"{random.Next(100_000, 999_999)}{random.Next(100_000, 999_999)}" : null,
                 TransactionDate = digital ? DateOnly.FromDateTime(created.AddDays(-1).UtcDateTime) : null,
                 TransactionAmount = digital ? random.Next(100, 50_000) : null,
-                AssignedDepartmentId = sub.DefaultDepartmentId,
+                AssignedDepartmentCode = sub.DefaultDepartmentCode,
+                AssignedDepartmentName = sub.DefaultDepartmentCode is { } dept ? departmentNames[dept] : null,
                 SlaDueDate = SlaCalculator.DueDate(created, sub.TatDays),
                 CreatedAt = created,
                 UpdatedAt = created,
@@ -144,15 +119,19 @@ public static class DevDataSeeder
                 at = at.AddHours(random.Next(2, 60));
                 if (at > now) break;
                 var code = flow[s];
-                var actor = assignees.Count > 0 ? assignees[random.Next(assignees.Count)] : null;
+                // Prefer staff of the complaint's own branch, then its RO, then Head Office.
+                var local = assignees.Where(u => u.OfficeCode == branch.Code).ToList();
+                if (local.Count == 0) local = assignees.Where(u => u.OfficeCode == branch.RegionCode).ToList();
+                if (local.Count == 0) local = assignees.Where(u => u.OfficeType == "Head Office").ToList();
+                var actor = local.Count > 0 ? local[random.Next(local.Count)] : null;
                 if (code == "ASSIGNED" && actor is not null)
                 {
-                    complaint.AssignedEmployeeId = actor.EmployeeId;
-                    complaint.AssignedEmployeeName = actor.Name;
+                    complaint.AssignedEmployeeId = actor.EmployeeCode;
+                    complaint.AssignedEmployeeName = actor.FullName;
                     complaint.Assignments.Add(new ComplaintAssignment
                     {
-                        ComplaintId = complaint.Id, AssignedToEmployeeId = actor.EmployeeId, AssignedToName = actor.Name,
-                        AssignedByEmployeeId = "E1001", AssignedAt = at, Remarks = "Please examine and resolve.",
+                        ComplaintId = complaint.Id, AssignedToEmployeeId = actor.EmployeeCode, AssignedToName = actor.FullName,
+                        AssignedByEmployeeId = "200001", AssignedAt = at, Remarks = "Please examine and resolve.",
                     });
                 }
                 if (code == "UNDER_PROCESS" && random.Next(2) == 0)
@@ -160,8 +139,8 @@ public static class DevDataSeeder
                     complaint.Remarks.Add(new ComplaintRemark
                     {
                         ComplaintId = complaint.Id, Remark = "Transaction log requested from the switch team.",
-                        Visibility = RemarkVisibility.Internal, CreatedByEmployeeId = actor?.EmployeeId ?? "E1001",
-                        CreatedByName = actor?.Name, CreatedAt = at,
+                        Visibility = RemarkVisibility.Internal, CreatedByEmployeeId = actor?.EmployeeCode ?? "100001",
+                        CreatedByName = actor?.FullName, CreatedAt = at,
                     });
                 }
                 if (code == "RESOLVED")
@@ -171,8 +150,8 @@ public static class DevDataSeeder
                     {
                         ComplaintId = complaint.Id,
                         Remark = "The amount has been reversed to your account. Please check your statement.",
-                        Visibility = RemarkVisibility.Customer, CreatedByEmployeeId = actor?.EmployeeId ?? "E1001",
-                        CreatedByName = actor?.Name, CreatedAt = at,
+                        Visibility = RemarkVisibility.Customer, CreatedByEmployeeId = actor?.EmployeeCode ?? "100001",
+                        CreatedByName = actor?.FullName, CreatedAt = at,
                     });
                 }
                 if (statuses[code].IsTerminal) complaint.ClosedAt = at;
@@ -180,10 +159,47 @@ public static class DevDataSeeder
                 complaint.StatusHistory.Add(new ComplaintStatusHistory
                 {
                     ComplaintId = complaint.Id, OldStatusCode = complaint.StatusCode, NewStatusCode = code,
-                    ChangedByEmployeeId = actor?.EmployeeId ?? "E1001", ChangedByName = actor?.Name, ChangedAt = at,
+                    ChangedByEmployeeId = actor?.EmployeeCode ?? "100001", ChangedByName = actor?.FullName, ChangedAt = at,
                 });
                 complaint.StatusCode = code;
                 complaint.UpdatedAt = at;
+            }
+
+            // Some complaints under process have a Maker's resolution waiting for a Checker.
+            if (complaint.StatusCode is "UNDER_PROCESS" or "ASSIGNED" && random.Next(4) > 0)
+            {
+                var maker = assignees.FirstOrDefault(u => u.OfficeCode == branch.Code)
+                    ?? assignees.FirstOrDefault(u => u.OfficeCode == branch.RegionCode)
+                    ?? assignees.FirstOrDefault(u => u.OfficeType == "Head Office");
+                if (maker is not null)
+                {
+                    var requestedAt = at.AddHours(random.Next(1, 20));
+                    if (requestedAt > now) requestedAt = now.AddMinutes(-5);
+                    var byBranch = maker.OfficeType == "Branch";
+                    var byHeadOffice = maker.OfficeType == "Head Office";
+                    db.ComplaintApprovals.Add(new ComplaintApproval
+                    {
+                        ComplaintId = complaint.Id,
+                        RequestedStatusCode = "RESOLVED",
+                        PreviousStatusCode = complaint.StatusCode,
+                        MakerRemarks = "Amount reversed to the customer's account; reversal confirmed with the switch team.",
+                        RequestedByEmployeeId = maker.EmployeeCode,
+                        RequestedByName = maker.FullName,
+                        RequestedByOfficeName = maker.OfficeName,
+                        RequestedAt = requestedAt,
+                        ApproverLevel = byBranch ? ScopeLevel.Region : ScopeLevel.HeadOffice,
+                        ApproverOfficeCode = byBranch ? branch.RegionCode : null,
+                        ApproverDepartment = byHeadOffice ? "CSD" : null,
+                    });
+                    complaint.StatusHistory.Add(new ComplaintStatusHistory
+                    {
+                        ComplaintId = complaint.Id, OldStatusCode = complaint.StatusCode, NewStatusCode = "PENDING_APPROVAL",
+                        ChangedByEmployeeId = maker.EmployeeCode, ChangedByName = maker.FullName, ChangedAt = requestedAt,
+                        Remarks = "Requested: Resolved. Amount reversed to the customer's account.",
+                    });
+                    complaint.StatusCode = "PENDING_APPROVAL";
+                    complaint.UpdatedAt = requestedAt;
+                }
             }
             db.Complaints.Add(complaint);
         }

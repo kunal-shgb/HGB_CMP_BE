@@ -22,6 +22,58 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.AppSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Value")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Key")
+                        .HasName("pk_app_settings");
+
+                    b.ToTable("app_settings", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Key = "approvals.ho_maker_checker_department",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Key = "escalation.enabled",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Value = "true"
+                        },
+                        new
+                        {
+                            Key = "escalation.to_ro_after_overdue_days",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Value = "0"
+                        },
+                        new
+                        {
+                            Key = "escalation.to_ho_after_overdue_days",
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Value = "7"
+                        });
+                });
+
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ApplicationRoleMapping", b =>
                 {
                     b.Property<Guid>("Id")
@@ -49,6 +101,11 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<string>("OfficeType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("office_type");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -56,11 +113,42 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.HasKey("Id")
                         .HasName("pk_application_role_mapping");
 
-                    b.HasIndex("IamRole", "ApplicationRole")
+                    b.HasIndex("IamRole", "OfficeType", "ApplicationRole")
                         .IsUnique()
-                        .HasDatabaseName("ix_application_role_mapping_iam_role_application_role");
+                        .HasDatabaseName("ix_application_role_mapping_iam_role_office_type_application_r~");
+
+                    NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("IamRole", "OfficeType", "ApplicationRole"), false);
 
                     b.ToTable("application_role_mapping", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("03a1bc9c-a4b4-3e70-0243-1219fc510e93"),
+                            ApplicationRole = "MAKER",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IamRole = "Maker",
+                            IsActive = true,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("c8adcc93-d5ba-b281-e87e-ad90154c4925"),
+                            ApplicationRole = "CHECKER",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IamRole = "Checker",
+                            IsActive = true,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("4f8a4b00-80d3-2321-b3ab-7c6a82020de6"),
+                            ApplicationRole = "ADMIN",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IamRole = "Admin",
+                            IsActive = true,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        });
                 });
 
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.AuditLog", b =>
@@ -127,54 +215,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.ToTable("audit_logs", (string)null);
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.Branch", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("code");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("name");
-
-                    b.Property<Guid>("RegionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("region_id");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_branches");
-
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("ix_branches_code");
-
-                    b.HasIndex("RegionId")
-                        .HasDatabaseName("ix_branches_region_id");
-
-                    b.ToTable("branches", (string)null);
-                });
-
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.Complaint", b =>
                 {
                     b.Property<Guid>("Id")
@@ -187,9 +227,15 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(34)")
                         .HasColumnName("account_number");
 
-                    b.Property<Guid?>("AssignedDepartmentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("assigned_department_id");
+                    b.Property<string>("AssignedDepartmentCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("assigned_department_code");
+
+                    b.Property<string>("AssignedDepartmentName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("assigned_department_name");
 
                     b.Property<string>("AssignedEmployeeId")
                         .HasMaxLength(32)
@@ -201,9 +247,17 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("assigned_employee_name");
 
-                    b.Property<Guid>("BranchId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("branch_id");
+                    b.Property<string>("BranchCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("branch_code");
+
+                    b.Property<string>("BranchName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("branch_name");
 
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid")
@@ -266,6 +320,18 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("priority_code");
 
+                    b.Property<string>("RegionCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("region_code");
+
+                    b.Property<string>("RegionName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("region_name");
+
                     b.Property<DateTimeOffset?>("ResolvedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("resolved_at");
@@ -308,14 +374,14 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.HasIndex("AccountNumber")
                         .HasDatabaseName("ix_complaints_account_number");
 
-                    b.HasIndex("AssignedDepartmentId")
-                        .HasDatabaseName("ix_complaints_assigned_department_id");
+                    b.HasIndex("AssignedDepartmentCode")
+                        .HasDatabaseName("ix_complaints_assigned_department_code");
 
                     b.HasIndex("AssignedEmployeeId")
                         .HasDatabaseName("ix_complaints_assigned_employee_id");
 
-                    b.HasIndex("BranchId")
-                        .HasDatabaseName("ix_complaints_branch_id");
+                    b.HasIndex("BranchCode")
+                        .HasDatabaseName("ix_complaints_branch_code");
 
                     b.HasIndex("CategoryId")
                         .HasDatabaseName("ix_complaints_category_id");
@@ -327,11 +393,17 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("ix_complaints_created_at");
 
+                    b.HasIndex("EscalationLevel")
+                        .HasDatabaseName("ix_complaints_escalation_level");
+
                     b.HasIndex("MobileNumber")
                         .HasDatabaseName("ix_complaints_mobile_number");
 
                     b.HasIndex("PriorityCode")
                         .HasDatabaseName("ix_complaints_priority_code");
+
+                    b.HasIndex("RegionCode")
+                        .HasDatabaseName("ix_complaints_region_code");
 
                     b.HasIndex("StatusCode")
                         .HasDatabaseName("ix_complaints_status_code");
@@ -346,6 +418,121 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_complaints_closed_at_sla_due_date");
 
                     b.ToTable("complaints", (string)null);
+                });
+
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ApproverDepartment")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("approver_department");
+
+                    b.Property<string>("ApproverLevel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("approver_level");
+
+                    b.Property<string>("ApproverOfficeCode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("approver_office_code");
+
+                    b.Property<Guid>("ComplaintId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("complaint_id");
+
+                    b.Property<DateTimeOffset?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at");
+
+                    b.Property<string>("DecidedByEmployeeId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("decided_by_employee_id");
+
+                    b.Property<string>("DecidedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("decided_by_name");
+
+                    b.Property<string>("DecisionRemarks")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("decision_remarks");
+
+                    b.Property<string>("MakerRemarks")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("maker_remarks");
+
+                    b.Property<string>("PreviousStatusCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("previous_status_code");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("RequestedByEmployeeId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("requested_by_employee_id");
+
+                    b.Property<string>("RequestedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("requested_by_name");
+
+                    b.Property<string>("RequestedByOfficeName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("requested_by_office_name");
+
+                    b.Property<string>("RequestedStatusCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("requested_status_code");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_complaint_approvals");
+
+                    b.HasIndex("ComplaintId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_complaint_approvals_one_pending")
+                        .HasFilter("status = 'Pending'");
+
+                    b.HasIndex("PreviousStatusCode")
+                        .HasDatabaseName("ix_complaint_approvals_previous_status_code");
+
+                    b.HasIndex("RequestedStatusCode")
+                        .HasDatabaseName("ix_complaint_approvals_requested_status_code");
+
+                    b.HasIndex("Status", "ApproverLevel", "ApproverOfficeCode")
+                        .HasDatabaseName("ix_complaint_approvals_status_approver_level_approver_office_c~");
+
+                    b.ToTable("complaint_approvals", (string)null);
                 });
 
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintAssignment", b =>
@@ -365,9 +552,10 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("assigned_by_employee_id");
 
-                    b.Property<Guid?>("AssignedDepartmentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("assigned_department_id");
+                    b.Property<string>("AssignedDepartmentCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("assigned_department_code");
 
                     b.Property<string>("AssignedFromEmployeeId")
                         .HasMaxLength(32)
@@ -396,9 +584,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_complaint_assignments");
-
-                    b.HasIndex("AssignedDepartmentId")
-                        .HasDatabaseName("ix_complaint_assignments_assigned_department_id");
 
                     b.HasIndex("ComplaintId", "AssignedAt")
                         .HasDatabaseName("ix_complaint_assignments_complaint_id_assigned_at");
@@ -433,6 +618,18 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("file_size");
 
+                    b.Property<string>("ScanStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("scan_status");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("sha256");
+
                     b.Property<string>("StorageKey")
                         .IsRequired()
                         .HasMaxLength(512)
@@ -448,6 +645,11 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("uploaded_by");
+
+                    b.Property<string>("UploadedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("uploaded_by_name");
 
                     b.HasKey("Id")
                         .HasName("pk_complaint_attachments");
@@ -824,6 +1026,55 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintEscalation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ComplaintId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("complaint_id");
+
+                    b.Property<DateTimeOffset>("EscalatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("escalated_at");
+
+                    b.Property<string>("EscalatedBy")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("escalated_by");
+
+                    b.Property<string>("EscalatedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("escalated_by_name");
+
+                    b.Property<int>("FromLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("from_level");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("reason");
+
+                    b.Property<int>("ToLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("to_level");
+
+                    b.HasKey("Id")
+                        .HasName("pk_complaint_escalations");
+
+                    b.HasIndex("ComplaintId", "EscalatedAt")
+                        .HasDatabaseName("ix_complaint_escalations_complaint_id_escalated_at");
+
+                    b.ToTable("complaint_escalations", (string)null);
+                });
+
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintPriority", b =>
                 {
                     b.Property<string>("Code")
@@ -953,6 +1204,10 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("IsApprovalPending")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_approval_pending");
+
                     b.Property<bool>("IsAssignment")
                         .HasColumnType("boolean")
                         .HasColumnName("is_assignment");
@@ -990,6 +1245,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "NEW",
                             CustomerLabel = "Registered",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = true,
                             IsResolution = false,
@@ -1002,6 +1258,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "RECEIVED",
                             CustomerLabel = "Under review",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1014,6 +1271,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "ASSIGNED",
                             CustomerLabel = "Under review",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = true,
                             IsInitial = false,
                             IsResolution = false,
@@ -1026,6 +1284,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "UNDER_PROCESS",
                             CustomerLabel = "Under process",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1038,6 +1297,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "CUSTOMER_RESPONSE",
                             CustomerLabel = "Awaiting your response",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1050,6 +1310,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "ESCALATED",
                             CustomerLabel = "Under process",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1062,6 +1323,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "TRANSFERRED",
                             CustomerLabel = "Under process",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1071,9 +1333,23 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         },
                         new
                         {
+                            Code = "PENDING_APPROVAL",
+                            CustomerLabel = "Under process",
+                            IsActive = true,
+                            IsApprovalPending = true,
+                            IsAssignment = false,
+                            IsInitial = false,
+                            IsResolution = false,
+                            IsTerminal = false,
+                            Name = "Pending checker approval",
+                            SortOrder = 75
+                        },
+                        new
+                        {
                             Code = "RESOLVED",
                             CustomerLabel = "Resolved",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = true,
@@ -1086,6 +1362,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "REOPENED",
                             CustomerLabel = "Reopened",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1098,6 +1375,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "CLOSED",
                             CustomerLabel = "Closed",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1110,6 +1388,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "REJECTED",
                             CustomerLabel = "Closed",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1122,6 +1401,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "DUPLICATE",
                             CustomerLabel = "Closed",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1134,6 +1414,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Code = "WITHDRAWN",
                             CustomerLabel = "Withdrawn",
                             IsActive = true,
+                            IsApprovalPending = false,
                             IsAssignment = false,
                             IsInitial = false,
                             IsResolution = false,
@@ -1213,6 +1494,10 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
+                    b.Property<bool>("RequiresApproval")
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_approval");
+
                     b.Property<bool>("RequiresRemark")
                         .HasColumnType("boolean")
                         .HasColumnName("requires_remark");
@@ -1241,6 +1526,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 1,
                             FromStatusCode = "NEW",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "RECEIVED"
                         },
@@ -1249,6 +1535,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 2,
                             FromStatusCode = "NEW",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "ASSIGNED"
                         },
@@ -1257,6 +1544,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 3,
                             FromStatusCode = "NEW",
                             IsActive = true,
+                            RequiresApproval = true,
                             RequiresRemark = true,
                             ToStatusCode = "REJECTED"
                         },
@@ -1265,6 +1553,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 4,
                             FromStatusCode = "NEW",
                             IsActive = true,
+                            RequiresApproval = true,
                             RequiresRemark = true,
                             ToStatusCode = "DUPLICATE"
                         },
@@ -1273,6 +1562,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 5,
                             FromStatusCode = "RECEIVED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "ASSIGNED"
                         },
@@ -1281,6 +1571,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 6,
                             FromStatusCode = "RECEIVED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "UNDER_PROCESS"
                         },
@@ -1289,6 +1580,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 7,
                             FromStatusCode = "RECEIVED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "TRANSFERRED"
                         },
@@ -1297,6 +1589,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 8,
                             FromStatusCode = "RECEIVED",
                             IsActive = true,
+                            RequiresApproval = true,
                             RequiresRemark = true,
                             ToStatusCode = "REJECTED"
                         },
@@ -1305,6 +1598,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 9,
                             FromStatusCode = "RECEIVED",
                             IsActive = true,
+                            RequiresApproval = true,
                             RequiresRemark = true,
                             ToStatusCode = "DUPLICATE"
                         },
@@ -1313,6 +1607,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 10,
                             FromStatusCode = "ASSIGNED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "UNDER_PROCESS"
                         },
@@ -1321,6 +1616,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 11,
                             FromStatusCode = "ASSIGNED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "TRANSFERRED"
                         },
@@ -1329,6 +1625,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 12,
                             FromStatusCode = "ASSIGNED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "ESCALATED"
                         },
@@ -1337,6 +1634,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 13,
                             FromStatusCode = "UNDER_PROCESS",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "CUSTOMER_RESPONSE"
                         },
@@ -1345,6 +1643,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 14,
                             FromStatusCode = "UNDER_PROCESS",
                             IsActive = true,
+                            RequiresApproval = true,
                             RequiresRemark = true,
                             ToStatusCode = "RESOLVED"
                         },
@@ -1353,6 +1652,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 15,
                             FromStatusCode = "UNDER_PROCESS",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "ESCALATED"
                         },
@@ -1361,6 +1661,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 16,
                             FromStatusCode = "UNDER_PROCESS",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "TRANSFERRED"
                         },
@@ -1369,6 +1670,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 17,
                             FromStatusCode = "CUSTOMER_RESPONSE",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "UNDER_PROCESS"
                         },
@@ -1377,6 +1679,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 18,
                             FromStatusCode = "CUSTOMER_RESPONSE",
                             IsActive = true,
+                            RequiresApproval = true,
                             RequiresRemark = true,
                             ToStatusCode = "RESOLVED"
                         },
@@ -1385,6 +1688,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 19,
                             FromStatusCode = "CUSTOMER_RESPONSE",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "WITHDRAWN"
                         },
@@ -1393,6 +1697,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 20,
                             FromStatusCode = "ESCALATED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "ASSIGNED"
                         },
@@ -1401,6 +1706,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 21,
                             FromStatusCode = "ESCALATED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "UNDER_PROCESS"
                         },
@@ -1409,6 +1715,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 22,
                             FromStatusCode = "ESCALATED",
                             IsActive = true,
+                            RequiresApproval = true,
                             RequiresRemark = true,
                             ToStatusCode = "RESOLVED"
                         },
@@ -1417,6 +1724,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 23,
                             FromStatusCode = "TRANSFERRED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "ASSIGNED"
                         },
@@ -1425,6 +1733,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 24,
                             FromStatusCode = "TRANSFERRED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "UNDER_PROCESS"
                         },
@@ -1433,6 +1742,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 25,
                             FromStatusCode = "RESOLVED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "CLOSED"
                         },
@@ -1441,6 +1751,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 26,
                             FromStatusCode = "RESOLVED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "REOPENED"
                         },
@@ -1449,6 +1760,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 27,
                             FromStatusCode = "CLOSED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = true,
                             ToStatusCode = "REOPENED"
                         },
@@ -1457,6 +1769,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 28,
                             FromStatusCode = "REOPENED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "ASSIGNED"
                         },
@@ -1465,6 +1778,7 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                             Id = 29,
                             FromStatusCode = "REOPENED",
                             IsActive = true,
+                            RequiresApproval = false,
                             RequiresRemark = false,
                             ToStatusCode = "UNDER_PROCESS"
                         });
@@ -1491,9 +1805,10 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<Guid?>("DefaultDepartmentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("default_department_id");
+                    b.Property<string>("DefaultDepartmentCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("default_department_code");
 
                     b.Property<string>("DefaultPriorityCode")
                         .HasMaxLength(40)
@@ -1524,9 +1839,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_complaint_subcategories");
-
-                    b.HasIndex("DefaultDepartmentId")
-                        .HasDatabaseName("ix_complaint_subcategories_default_department_id");
 
                     b.HasIndex("DefaultPriorityCode")
                         .HasDatabaseName("ix_complaint_subcategories_default_priority_code");
@@ -1859,86 +2171,136 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.Department", b =>
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Code")
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("Body")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("code");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("body");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("channel");
+
+                    b.Property<Guid?>("ComplaintId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("complaint_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("Name")
+                    b.Property<string>("Event")
                         .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("name");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("event");
 
-                    b.Property<DateTimeOffset>("UpdatedAt")
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset>("NextAttemptAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("next_attempt_at");
+
+                    b.Property<string>("ProviderReference")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("provider_reference");
+
+                    b.Property<string>("Recipient")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("recipient");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sent_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("subject");
 
                     b.HasKey("Id")
-                        .HasName("pk_departments");
+                        .HasName("pk_notification_outbox");
 
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("ix_departments_code");
+                    b.HasIndex("ComplaintId")
+                        .HasDatabaseName("ix_notification_outbox_complaint_id");
 
-                    b.ToTable("departments", (string)null);
+                    b.HasIndex("Status", "NextAttemptAt")
+                        .HasDatabaseName("ix_notification_outbox_status_next_attempt_at");
+
+                    b.ToTable("notification_outbox", (string)null);
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.Region", b =>
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.TrackingOtp", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Code")
+                    b.Property<string>("CodeHash")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("code");
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code_hash");
+
+                    b.Property<Guid>("ComplaintId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("complaint_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("name");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
+                    b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("expires_at");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("failed_attempts");
+
+                    b.Property<string>("Salt")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("salt");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("used_at");
 
                     b.HasKey("Id")
-                        .HasName("pk_regions");
+                        .HasName("pk_tracking_otps");
 
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("ix_regions_code");
+                    b.HasIndex("ComplaintId", "CreatedAt")
+                        .HasDatabaseName("ix_tracking_otps_complaint_id_created_at");
 
-                    b.ToTable("regions", (string)null);
+                    b.ToTable("tracking_otps", (string)null);
                 });
 
             modelBuilder.Entity("ComplaintManagement.Infrastructure.Persistence.ComplaintNumberSequence", b =>
@@ -1957,33 +2319,8 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.ToTable("complaint_number_sequences", (string)null);
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.Branch", b =>
-                {
-                    b.HasOne("ComplaintManagement.Domain.Entities.Region", "Region")
-                        .WithMany("Branches")
-                        .HasForeignKey("RegionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_branches_regions_region_id");
-
-                    b.Navigation("Region");
-                });
-
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.Complaint", b =>
                 {
-                    b.HasOne("ComplaintManagement.Domain.Entities.Department", "AssignedDepartment")
-                        .WithMany()
-                        .HasForeignKey("AssignedDepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_complaints_departments_assigned_department_id");
-
-                    b.HasOne("ComplaintManagement.Domain.Entities.Branch", "Branch")
-                        .WithMany()
-                        .HasForeignKey("BranchId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_complaints_branches_branch_id");
-
                     b.HasOne("ComplaintManagement.Domain.Entities.ComplaintCategory", "Category")
                         .WithMany()
                         .HasForeignKey("CategoryId")
@@ -2012,10 +2349,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_complaints_complaint_subcategories_sub_category_id");
 
-                    b.Navigation("AssignedDepartment");
-
-                    b.Navigation("Branch");
-
                     b.Navigation("Category");
 
                     b.Navigation("Priority");
@@ -2025,14 +2358,34 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.Navigation("SubCategory");
                 });
 
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintApproval", b =>
+                {
+                    b.HasOne("ComplaintManagement.Domain.Entities.Complaint", "Complaint")
+                        .WithMany()
+                        .HasForeignKey("ComplaintId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_complaint_approvals_complaints_complaint_id");
+
+                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintStatus", null)
+                        .WithMany()
+                        .HasForeignKey("PreviousStatusCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_complaint_approvals_complaint_statuses_previous_status_code");
+
+                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintStatus", null)
+                        .WithMany()
+                        .HasForeignKey("RequestedStatusCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_complaint_approvals_complaint_statuses_requested_status_code");
+
+                    b.Navigation("Complaint");
+                });
+
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintAssignment", b =>
                 {
-                    b.HasOne("ComplaintManagement.Domain.Entities.Department", null)
-                        .WithMany()
-                        .HasForeignKey("AssignedDepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_complaint_assignments_departments_assigned_department_id");
-
                     b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
                         .WithMany("Assignments")
                         .HasForeignKey("ComplaintId")
@@ -2049,6 +2402,16 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_complaint_attachments_complaints_complaint_id");
+                });
+
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintEscalation", b =>
+                {
+                    b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
+                        .WithMany("Escalations")
+                        .HasForeignKey("ComplaintId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_complaint_escalations_complaints_complaint_id");
                 });
 
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintRemark", b =>
@@ -2097,12 +2460,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_complaint_subcategories_complaint_categories_category_id");
 
-                    b.HasOne("ComplaintManagement.Domain.Entities.Department", null)
-                        .WithMany()
-                        .HasForeignKey("DefaultDepartmentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_complaint_subcategories_departments_default_department_id");
-
                     b.HasOne("ComplaintManagement.Domain.Entities.ComplaintPriority", null)
                         .WithMany()
                         .HasForeignKey("DefaultPriorityCode")
@@ -2112,11 +2469,32 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.Navigation("Category");
                 });
 
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
+                        .WithMany()
+                        .HasForeignKey("ComplaintId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("fk_notification_outbox_complaints_complaint_id");
+                });
+
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.TrackingOtp", b =>
+                {
+                    b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
+                        .WithMany()
+                        .HasForeignKey("ComplaintId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tracking_otps_complaints_complaint_id");
+                });
+
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.Complaint", b =>
                 {
                     b.Navigation("Assignments");
 
                     b.Navigation("Attachments");
+
+                    b.Navigation("Escalations");
 
                     b.Navigation("Remarks");
 
@@ -2126,11 +2504,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintCategory", b =>
                 {
                     b.Navigation("SubCategories");
-                });
-
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.Region", b =>
-                {
-                    b.Navigation("Branches");
                 });
 #pragma warning restore 612, 618
         }

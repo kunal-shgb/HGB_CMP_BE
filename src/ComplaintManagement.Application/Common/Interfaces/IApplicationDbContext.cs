@@ -15,11 +15,13 @@ public interface IApplicationDbContext
     DbSet<ComplaintStatus> Statuses { get; }
     DbSet<ComplaintStatusTransition> StatusTransitions { get; }
     DbSet<ComplaintPriority> Priorities { get; }
-    DbSet<Region> Regions { get; }
-    DbSet<Branch> Branches { get; }
-    DbSet<Department> Departments { get; }
     DbSet<ApplicationRoleMapping> ApplicationRoleMappings { get; }
     DbSet<AuditLog> AuditLogs { get; }
+    DbSet<ComplaintApproval> ComplaintApprovals { get; }
+    DbSet<AppSetting> AppSettings { get; }
+    DbSet<ComplaintEscalation> ComplaintEscalations { get; }
+    DbSet<Notification> Notifications { get; }
+    DbSet<TrackingOtp> TrackingOtps { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

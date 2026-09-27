@@ -8,7 +8,7 @@ namespace ComplaintManagement.Infrastructure.IAM;
 /// </summary>
 internal sealed class IamUserService : IIamUserService
 {
-    public Task<IamUser?> GetUserAsync(string employeeId, CancellationToken cancellationToken = default) =>
+    public Task<IamUser?> GetUserAsync(string employeeCode, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Bank IAM directory integration is pending the IAM API specification.");
 
     public Task<IReadOnlyList<IamUser>> SearchUsersAsync(string? query, CancellationToken cancellationToken = default) =>

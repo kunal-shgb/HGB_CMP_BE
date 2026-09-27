@@ -64,8 +64,12 @@ public sealed class PublicCreateComplaintValidator : AbstractValidator<PublicCre
         RuleFor(x => x.CategoryCode).NotEmpty().MaximumLength(40);
         RuleFor(x => x.SubCategoryCode).NotEmpty().MaximumLength(40);
         RuleFor(x => x.TransactionId).MaximumLength(64).Matches("^[A-Za-z0-9-]*$");
+        RuleFor(x => x.TransactionDate)
+            .Must(d => d is null || d <= DateOnly.FromDateTime(DateTime.UtcNow.AddHours(5.5)))
+            .WithMessage("Transaction date cannot be in the future.");
         RuleFor(x => x.Amount).GreaterThan(0).LessThan(1_000_000_000).When(x => x.Amount is not null);
         RuleFor(x => x.Description).NotEmpty().MinimumLength(10).MaximumLength(4000);
-        RuleFor(x => x.PreferredChannel).MaximumLength(16);
+        RuleFor(x => x.PreferredChannel).Must(c => c is null or "" or "SMS" or "EMAIL").WithMessage("Preferred channel must be SMS or EMAIL.");
+        RuleFor(x => x.Email).NotEmpty().When(x => x.PreferredChannel == "EMAIL").WithMessage("Enter an email address to be contacted by email.");
     }
 }

@@ -2,6 +2,7 @@ using ComplaintManagement.Application.Common;
 using ComplaintManagement.Application.Common.Exceptions;
 using ComplaintManagement.Application.Common.Interfaces;
 using ComplaintManagement.Application.Common.Security;
+using ComplaintManagement.Application.Notifications;
 using ComplaintManagement.Contracts;
 using ComplaintManagement.Contracts.Requests;
 using ComplaintManagement.Contracts.Responses;
@@ -19,9 +20,14 @@ public interface IComplaintService
     Task<PagedResponse<ComplaintListItem>> ListAsync(ComplaintFilterRequest filter, CancellationToken ct);
     Task<ComplaintDetail> GetAsync(Guid id, CancellationToken ct);
     Task<IReadOnlyList<TimelineEvent>> GetHistoryAsync(Guid id, CancellationToken ct);
-    Task ChangeStatusAsync(Guid id, ChangeStatusRequest request, CancellationToken ct);
+    Task<ChangeStatusResponse> ChangeStatusAsync(Guid id, ChangeStatusRequest request, CancellationToken ct);
+    Task<IReadOnlyList<ApprovalListItem>> ListPendingApprovalsAsync(CancellationToken ct);
+    Task ApproveAsync(Guid approvalId, DecideApprovalRequest request, CancellationToken ct);
+    Task ReturnAsync(Guid approvalId, DecideApprovalRequest request, CancellationToken ct);
     Task AssignAsync(Guid id, AssignComplaintRequest request, CancellationToken ct);
     Task<RemarkItem> AddRemarkAsync(Guid id, AddRemarkRequest request, CancellationToken ct);
+    Task EscalateAsync(Guid id, EscalateRequest request, CancellationToken ct);
+    Task<IReadOnlyList<NotificationItem>> GetNotificationsAsync(Guid id, CancellationToken ct);
 }
 
 public sealed class ComplaintService(
@@ -29,12 +35,14 @@ public sealed class ComplaintService(
     ICurrentUser user,
     IAuditLogger audit,
     IIamUserService iam,
+    IIamOrganisationService org,
     TimeProvider clock,
     IOptions<SlaOptions> slaOptions,
     IValidator<ComplaintFilterRequest> filterValidator,
     IValidator<ChangeStatusRequest> statusValidator,
     IValidator<AssignComplaintRequest> assignValidator,
-    IValidator<AddRemarkRequest> remarkValidator) : IComplaintService
+    IValidator<AddRemarkRequest> remarkValidator,
+    CustomerNotifier notifier) : IComplaintService
 {
     private const string Module = "Complaint";
 
@@ -52,10 +60,10 @@ public sealed class ComplaintService(
             .Take(filter.PageSize)
             .Select(c => new
             {
-                c.Id, c.ComplaintNumber, c.CustomerName, c.MobileNumber, c.CreatedAt, c.SlaDueDate, c.ClosedAt,
+                c.Id, c.ComplaintNumber, c.CustomerName, c.MobileNumber, c.CreatedAt, c.SlaDueDate, c.ClosedAt, c.EscalationLevel,
                 c.AssignedEmployeeId, c.AssignedEmployeeName,
-                Branch = new OrgRef(c.Branch!.Code, c.Branch.Name),
-                Region = new OrgRef(c.Branch.Region!.Code, c.Branch.Region.Name),
+                Branch = new OrgRef(c.BranchCode, c.BranchName),
+                Region = new OrgRef(c.RegionCode, c.RegionName),
                 Category = new OrgRef(c.Category!.Code, c.Category.Name),
                 SubCategory = new OrgRef(c.SubCategory!.Code, c.SubCategory.Name),
                 Status = new StatusRef(c.Status!.Code, c.Status.Name, c.Status.IsTerminal),
@@ -69,6 +77,7 @@ public sealed class ComplaintService(
             r.Branch, r.Region, r.Category, r.SubCategory, r.Status, r.Priority,
             r.AssignedEmployeeId is null ? null : new EmployeeRef(r.AssignedEmployeeId, r.AssignedEmployeeName),
             BuildSla(r.CreatedAt, r.SlaDueDate, r.ClosedAt, now),
+            r.EscalationLevel,
             r.CreatedAt)).ToList();
 
         audit.Log("LIST", Module, null, $"page={filter.Page}");
@@ -88,10 +97,31 @@ public sealed class ComplaintService(
                 join s in db.Statuses.AsNoTracking() on t.ToStatusCode equals s.Code
                 where t.IsActive && s.IsActive && t.FromStatusCode == c.StatusCode
                 orderby s.SortOrder
-                select new AllowedTransition(s.Code, s.Name, t.RequiresRemark))
+                select new AllowedTransition(s.Code, s.Name, t.RequiresRemark, t.RequiresApproval))
             .ToListAsync(ct);
 
         if (!user.HasPermission(Permissions.ComplaintChangeStatus)) transitions = [];
+
+        var pending = await db.ComplaintApprovals.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ComplaintId == c.Id && a.Status == ApprovalStatus.Pending, ct);
+        PendingApprovalInfo? pendingInfo = null;
+        if (pending is not null)
+        {
+            // Nothing else moves while a decision is with the Checker.
+            transitions = [];
+            var requested = await db.Statuses.AsNoTracking().SingleAsync(s => s.Code == pending.RequestedStatusCode, ct);
+            pendingInfo = new PendingApprovalInfo(
+                pending.Id,
+                new StatusRef(requested.Code, requested.Name, requested.IsTerminal),
+                new EmployeeRef(pending.RequestedByEmployeeId, pending.RequestedByName),
+                pending.RequestedByOfficeName,
+                pending.RequestedAt,
+                pending.MakerRemarks,
+                pending.ApproverLevel.ToString(),
+                pending.ApproverOfficeCode,
+                pending.ApproverDepartment,
+                ApprovalRules.CanDecide(user, pending));
+        }
 
         audit.Log("VIEW", Module, c.Id.ToString(), unmasked ? "unmasked" : null);
         await db.SaveChangesAsync(ct);
@@ -109,24 +139,26 @@ public sealed class ComplaintService(
                 !unmasked),
             new TransactionInfo(c.TransactionId, c.TransactionDate, c.TransactionAmount),
             c.Description,
-            new OrgRef(c.Branch!.Code, c.Branch.Name),
-            new OrgRef(c.Branch.Region!.Code, c.Branch.Region.Name),
+            new OrgRef(c.BranchCode, c.BranchName),
+            new OrgRef(c.RegionCode, c.RegionName),
             new OrgRef(c.Category!.Code, c.Category.Name),
             new OrgRef(c.SubCategory!.Code, c.SubCategory.Name),
             new StatusRef(c.Status!.Code, c.Status.Name, c.Status.IsTerminal),
             new OrgRef(c.Priority!.Code, c.Priority.Name),
             c.AssignedEmployeeId is null ? null : new EmployeeRef(c.AssignedEmployeeId, c.AssignedEmployeeName),
-            c.AssignedDepartment is null ? null : new OrgRef(c.AssignedDepartment.Code, c.AssignedDepartment.Name),
+            c.AssignedDepartmentCode is null ? null : new OrgRef(c.AssignedDepartmentCode, c.AssignedDepartmentName ?? c.AssignedDepartmentCode),
             c.EscalationLevel,
+            NextEscalationLevel(c) is not null,
             BuildSla(c.CreatedAt, c.SlaDueDate, c.ClosedAt, now),
             c.CreatedAt,
             c.UpdatedAt,
             c.ResolvedAt,
             c.ClosedAt,
             transitions,
+            pendingInfo,
             c.Remarks.OrderByDescending(r => r.CreatedAt).Select(ToRemarkItem).ToList(),
             c.Attachments.OrderBy(a => a.UploadedAt)
-                .Select(a => new AttachmentItem(a.Id, a.FileName, a.ContentType, a.FileSize, a.UploadedAt)).ToList());
+                .Select(Attachments.AttachmentService.ToItem).ToList());
     }
 
     public async Task<IReadOnlyList<TimelineEvent>> GetHistoryAsync(Guid id, CancellationToken ct)
@@ -154,16 +186,25 @@ public sealed class ComplaintService(
             r.Visibility == RemarkVisibility.Internal ? "Internal remark added" : "Customer-visible remark added",
             r.Remark,
             new EmployeeRef(r.CreatedByEmployeeId, r.CreatedByName))));
+        events.AddRange(c.Escalations.Select(e => new TimelineEvent(
+            e.EscalatedAt,
+            "ESCALATION",
+            $"Escalated to {EscalationLevels.Name(e.ToLevel)} (level {e.ToLevel})",
+            e.Reason,
+            new EmployeeRef(e.EscalatedBy, e.EscalatedByName))));
         events.AddRange(c.Attachments.Select(a => new TimelineEvent(
-            a.UploadedAt, "ATTACHMENT", "Attachment uploaded", a.FileName, new EmployeeRef(a.UploadedBy, null))));
+            a.UploadedAt, "ATTACHMENT", "Attachment uploaded", a.FileName, new EmployeeRef(a.UploadedBy, a.UploadedByName))));
 
         return events.OrderByDescending(e => e.At).ToList();
     }
 
-    public async Task ChangeStatusAsync(Guid id, ChangeStatusRequest request, CancellationToken ct)
+    public async Task<ChangeStatusResponse> ChangeStatusAsync(Guid id, ChangeStatusRequest request, CancellationToken ct)
     {
         await statusValidator.ValidateAndThrowAsync(request, ct);
         var c = await LoadScopedAsync(id, ct, includeChildren: false);
+
+        if (await db.ComplaintApprovals.AnyAsync(a => a.ComplaintId == c.Id && a.Status == ApprovalStatus.Pending, ct))
+            throw new DomainException("approval.pending", "This complaint is waiting for a Checker's decision.");
 
         var transition = await db.StatusTransitions.AsNoTracking()
             .FirstOrDefaultAsync(t => t.IsActive && t.FromStatusCode == c.StatusCode && t.ToStatusCode == request.NewStatus, ct)
@@ -174,10 +215,128 @@ public sealed class ComplaintService(
             throw new DomainException("status.remark_required", "A remark is required for this status change.");
 
         var target = await db.Statuses.AsNoTracking().SingleAsync(s => s.Code == request.NewStatus, ct);
-        ApplyStatus(c, target, request.Remarks?.Trim());
+        var remarks = request.Remarks?.Trim();
 
-        audit.Log("CHANGE_STATUS", Module, c.Id.ToString(), $"{transition.FromStatusCode}->{target.Code}");
-        await db.SaveChangesAsync(ct);
+        if (!transition.RequiresApproval)
+        {
+            ApplyStatus(c, target, remarks);
+            audit.Log("CHANGE_STATUS", Module, c.Id.ToString(), $"{transition.FromStatusCode}->{target.Code}");
+            await db.SaveChangesAsync(ct);
+            return new ChangeStatusResponse(false, $"Status changed to {target.Name}.");
+        }
+
+        // Maker-checker: record the request and hold the complaint until a Checker decides.
+        var holding = await db.Statuses.AsNoTracking().FirstOrDefaultAsync(s => s.IsApprovalPending && s.IsActive, ct)
+            ?? throw new InvalidOperationException("No approval-pending status is configured.");
+        var hoDepartment = await db.AppSettings.AsNoTracking()
+            .Where(x => x.Key == AppSettingKeys.HeadOfficeMakerCheckerDepartment).Select(x => x.Value).FirstOrDefaultAsync(ct);
+        var (level, approverOffice, approverDepartment) = ApprovalRules.ApproverFor(user, c, hoDepartment);
+        db.ComplaintApprovals.Add(new ComplaintApproval
+        {
+            ComplaintId = c.Id,
+            RequestedStatusCode = target.Code,
+            PreviousStatusCode = c.StatusCode,
+            MakerRemarks = remarks,
+            RequestedByEmployeeId = user.EmployeeId,
+            RequestedByName = user.Name,
+            RequestedByOfficeName = user.OfficeName,
+            RequestedAt = clock.GetUtcNow(),
+            ApproverLevel = level,
+            ApproverOfficeCode = approverOffice,
+            ApproverDepartment = approverDepartment,
+        });
+        ApplyStatus(c, holding, $"Requested: {target.Name}" + (remarks is null ? "" : $". {remarks}"));
+        audit.Log("REQUEST_APPROVAL", Module, c.Id.ToString(), $"{transition.FromStatusCode}->{target.Code} approver={level}:{approverOffice ?? approverDepartment}");
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Unique index on one pending approval per complaint: someone else asked first.
+            throw new DomainException("approval.pending", "This complaint is already waiting for a Checker's decision.");
+        }
+
+        var approver = level != ScopeLevel.HeadOffice ? "your Regional Office"
+            : approverDepartment is null ? "Head Office" : $"Head Office ({approverDepartment})";
+        return new ChangeStatusResponse(true, $"Sent to a Checker at {approver} for approval.");
+    }
+
+    public async Task<IReadOnlyList<ApprovalListItem>> ListPendingApprovalsAsync(CancellationToken ct)
+    {
+        var rows = await db.ComplaintApprovals.AsNoTracking()
+            .DecidableBy(user)
+            .OrderBy(a => a.RequestedAt)
+            .Take(200)
+            .Select(a => new
+            {
+                a.Id, a.ComplaintId, a.RequestedStatusCode, a.RequestedByEmployeeId, a.RequestedByName,
+                a.RequestedByOfficeName, a.RequestedAt, a.MakerRemarks,
+                a.Complaint!.ComplaintNumber, a.Complaint.CustomerName, a.Complaint.CreatedAt, a.Complaint.SlaDueDate, a.Complaint.ClosedAt,
+                Branch = new OrgRef(a.Complaint.BranchCode, a.Complaint.BranchName),
+                Category = new OrgRef(a.Complaint.Category!.Code, a.Complaint.Category.Name),
+            })
+            .ToListAsync(ct);
+
+        var statuses = await db.Statuses.AsNoTracking().ToDictionaryAsync(s => s.Code, ct);
+        var now = clock.GetUtcNow();
+        return rows.Select(r =>
+        {
+            var s = statuses[r.RequestedStatusCode];
+            return new ApprovalListItem(
+                r.Id, r.ComplaintId, r.ComplaintNumber, r.CustomerName, r.Branch, r.Category,
+                new StatusRef(s.Code, s.Name, s.IsTerminal),
+                new EmployeeRef(r.RequestedByEmployeeId, r.RequestedByName),
+                r.RequestedByOfficeName, r.RequestedAt, r.MakerRemarks,
+                BuildSla(r.CreatedAt, r.SlaDueDate, r.ClosedAt, now));
+        }).ToList();
+    }
+
+    public Task ApproveAsync(Guid approvalId, DecideApprovalRequest request, CancellationToken ct) =>
+        DecideAsync(approvalId, request, approve: true, ct);
+
+    public Task ReturnAsync(Guid approvalId, DecideApprovalRequest request, CancellationToken ct) =>
+        DecideAsync(approvalId, request, approve: false, ct);
+
+    private async Task DecideAsync(Guid approvalId, DecideApprovalRequest request, bool approve, CancellationToken ct)
+    {
+        var remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim();
+        if (remarks is { Length: > 4000 })
+            throw new DomainException("approval.remark_too_long", "Keep remarks under 4,000 characters.");
+        if (!approve && remarks is null)
+            throw new DomainException("approval.remark_required", "Tell the Maker why the request is being returned.");
+
+        var approval = await db.ComplaintApprovals.FirstOrDefaultAsync(a => a.Id == approvalId, ct)
+            ?? throw new NotFoundException("Approval", approvalId);
+        var c = await LoadScopedAsync(approval.ComplaintId, ct, includeChildren: false);
+
+        if (approval.Status != ApprovalStatus.Pending)
+            throw new DomainException("approval.already_decided", "This request has already been decided.");
+        if (!ApprovalRules.CanDecide(user, approval))
+            throw new ForbiddenAccessException(
+                string.Equals(user.EmployeeId, approval.RequestedByEmployeeId, StringComparison.OrdinalIgnoreCase)
+                    ? "You cannot approve your own request."
+                    : "This request must be decided by a Checker at the approving office or department.");
+
+        var targetCode = approve ? approval.RequestedStatusCode : approval.PreviousStatusCode;
+        var target = await db.Statuses.AsNoTracking().SingleAsync(s => s.Code == targetCode, ct);
+
+        approval.Status = approve ? ApprovalStatus.Approved : ApprovalStatus.Returned;
+        approval.DecidedByEmployeeId = user.EmployeeId;
+        approval.DecidedByName = user.Name;
+        approval.DecidedAt = clock.GetUtcNow();
+        approval.DecisionRemarks = remarks;
+        ApplyStatus(c, target, (approve ? "Approved by Checker" : "Returned to Maker") + (remarks is null ? "" : $". {remarks}"));
+
+        audit.Log(approve ? "APPROVE" : "RETURN", Module, c.Id.ToString(), $"approval={approval.Id} -> {target.Code}");
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new DomainException("approval.already_decided", "Another Checker decided this request first.");
+        }
     }
 
     public async Task AssignAsync(Guid id, AssignComplaintRequest request, CancellationToken ct)
@@ -191,14 +350,15 @@ public sealed class ComplaintService(
 
         var assignee = await iam.GetUserAsync(request.AssignedToEmployeeId, ct)
             ?? throw new DomainException("assign.unknown_employee", "The selected employee was not found in the Bank directory.");
-        if (!ComplaintScope.CanTarget(user, assignee))
-            throw new ForbiddenAccessException("You can only assign complaints to employees within your office.");
+        if (!await ComplaintScope.CanTargetAsync(org, user, assignee, ct))
+            throw new ForbiddenAccessException("You can only assign complaints to active employees within your office.");
 
-        Department? department = null;
+        IamDepartment? department = null;
         if (!string.IsNullOrWhiteSpace(request.DepartmentCode))
         {
-            department = await db.Departments.FirstOrDefaultAsync(d => d.Code == request.DepartmentCode && d.IsActive, ct)
-                ?? throw new DomainException("assign.unknown_department", "The selected department was not found.");
+            department = await org.FindDepartmentAsync(request.DepartmentCode.Trim(), ct);
+            if (department is not { IsActive: true })
+                throw new DomainException("assign.unknown_department", "The selected department was not found.");
         }
 
         var now = clock.GetUtcNow();
@@ -206,16 +366,20 @@ public sealed class ComplaintService(
         {
             ComplaintId = c.Id,
             AssignedFromEmployeeId = c.AssignedEmployeeId,
-            AssignedToEmployeeId = assignee.EmployeeId,
-            AssignedToName = assignee.Name,
-            AssignedDepartmentId = department?.Id ?? c.AssignedDepartmentId,
+            AssignedToEmployeeId = assignee.EmployeeCode,
+            AssignedToName = assignee.FullName,
+            AssignedDepartmentCode = department?.Code ?? c.AssignedDepartmentCode,
             Remarks = request.Remarks?.Trim(),
             AssignedByEmployeeId = user.EmployeeId,
             AssignedAt = now,
         });
-        c.AssignedEmployeeId = assignee.EmployeeId;
-        c.AssignedEmployeeName = assignee.Name;
-        if (department is not null) c.AssignedDepartmentId = department.Id;
+        c.AssignedEmployeeId = assignee.EmployeeCode;
+        c.AssignedEmployeeName = assignee.FullName;
+        if (department is not null)
+        {
+            c.AssignedDepartmentCode = department.Code;
+            c.AssignedDepartmentName = department.Name;
+        }
 
         // Move to the workflow's "assigned" status when the current status allows it.
         var assignedStatus = await (
@@ -226,7 +390,7 @@ public sealed class ComplaintService(
             .FirstOrDefaultAsync(ct);
         if (assignedStatus is not null) ApplyStatus(c, assignedStatus, request.Remarks?.Trim());
 
-        audit.Log("ASSIGN", Module, c.Id.ToString(), $"to={assignee.EmployeeId}");
+        audit.Log("ASSIGN", Module, c.Id.ToString(), $"to={assignee.EmployeeCode}");
         await db.SaveChangesAsync(ct);
     }
 
@@ -252,9 +416,67 @@ public sealed class ComplaintService(
         return ToRemarkItem(remark);
     }
 
+    public async Task EscalateAsync(Guid id, EscalateRequest request, CancellationToken ct)
+    {
+        var remarks = request.Remarks?.Trim();
+        if (string.IsNullOrEmpty(remarks))
+            throw new DomainException("escalation.remark_required", "Give a reason for escalating.");
+        if (remarks.Length > 4000)
+            throw new DomainException("escalation.remark_too_long", "Keep the reason under 4,000 characters.");
+
+        var c = await LoadScopedAsync(id, ct, includeChildren: false);
+        var target = NextEscalationLevel(c)
+            ?? throw new DomainException("escalation.not_allowed", c.ClosedAt is not null
+                ? "A closed complaint cannot be escalated."
+                : "This complaint is already escalated beyond your office.");
+
+        var now = clock.GetUtcNow();
+        db.ComplaintEscalations.Add(new ComplaintEscalation
+        {
+            ComplaintId = c.Id, FromLevel = c.EscalationLevel, ToLevel = target, Reason = remarks,
+            EscalatedBy = user.EmployeeId, EscalatedByName = user.Name, EscalatedAt = now,
+        });
+        audit.Log("ESCALATE", Module, c.Id.ToString(), $"level {c.EscalationLevel}->{target}");
+        c.EscalationLevel = target;
+        c.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// The level the caller may escalate this complaint to, or null. Escalation goes one step above the
+    /// higher of the complaint's level and the caller's own office (Branch 1, RO 2, HO 3): a branch sends
+    /// it to its RO, an RO sends it to Head Office, and nobody escalates past Head Office.
+    /// </summary>
+    private int? NextEscalationLevel(Complaint c)
+    {
+        if (!user.HasPermission(Permissions.ComplaintEscalate) || c.ClosedAt is not null) return null;
+        int? own = user.ScopeLevel switch
+        {
+            ScopeLevel.Branch => EscalationLevels.Branch,
+            ScopeLevel.Region => EscalationLevels.RegionalOffice,
+            ScopeLevel.HeadOffice => EscalationLevels.HeadOffice,
+            _ => null,
+        };
+        if (own is null || own < c.EscalationLevel) return null;
+        var target = Math.Max(c.EscalationLevel, own.Value) + 1;
+        return target <= EscalationLevels.Max ? target : null;
+    }
+
+    public async Task<IReadOnlyList<NotificationItem>> GetNotificationsAsync(Guid id, CancellationToken ct)
+    {
+        var c = await LoadScopedAsync(id, ct, includeChildren: false);
+        var rows = await db.Notifications.AsNoTracking().Where(n => n.ComplaintId == c.Id).OrderByDescending(n => n.CreatedAt).ToListAsync(ct);
+        return rows.Select(n => new NotificationItem(
+            n.Id, n.Event, n.Channel,
+            n.Channel == NotificationChannel.Email ? Masking.Email(n.Recipient) : Masking.Mobile(n.Recipient),
+            n.Subject, n.Event == NotificationEvents.TrackingOtp ? NotificationEvents.RedactedBody : n.Body,
+            n.Status, n.Attempts, n.CreatedAt, n.SentAt, n.LastError)).ToList();
+    }
+
     private void ApplyStatus(Complaint c, ComplaintStatus target, string? remarks)
     {
         var now = clock.GetUtcNow();
+        if (c.Status is { } from && from.Code != target.Code) notifier.StatusChanged(c, from, target);
         db.ComplaintStatusHistory.Add(new ComplaintStatusHistory
         {
             ComplaintId = c.Id,
@@ -276,12 +498,10 @@ public sealed class ComplaintService(
     private async Task<Complaint> LoadScopedAsync(Guid id, CancellationToken ct, bool includeChildren)
     {
         IQueryable<Complaint> query = db.Complaints
-            .Include(c => c.Branch!).ThenInclude(b => b.Region)
             .Include(c => c.Category)
             .Include(c => c.SubCategory)
             .Include(c => c.Status)
-            .Include(c => c.Priority)
-            .Include(c => c.AssignedDepartment);
+            .Include(c => c.Priority);
 
         if (includeChildren)
         {
@@ -289,7 +509,8 @@ public sealed class ComplaintService(
                 .Include(c => c.StatusHistory)
                 .Include(c => c.Assignments)
                 .Include(c => c.Remarks)
-                .Include(c => c.Attachments);
+                .Include(c => c.Attachments)
+                .Include(c => c.Escalations);
         }
 
         // Out-of-scope complaints are reported as not found so their existence is not disclosed.
@@ -321,8 +542,8 @@ public sealed class ComplaintService(
         if (Clean(f.AccountNumber) is { } account) q = q.Where(c => c.AccountNumber == account);
         if (Clean(f.CustomerId) is { } customerId) q = q.Where(c => c.CustomerId == customerId);
         if (Clean(f.TransactionId) is { } txn) q = q.Where(c => c.TransactionId == txn);
-        if (Clean(f.BranchCode) is { } branch) q = q.Where(c => c.Branch!.Code == branch);
-        if (Clean(f.RegionCode) is { } region) q = q.Where(c => c.Branch!.Region!.Code == region);
+        if (Clean(f.BranchCode) is { } branch) q = q.Where(c => c.BranchCode == branch);
+        if (Clean(f.RegionCode) is { } region) q = q.Where(c => c.RegionCode == region);
         if (Clean(f.CategoryCode) is { } cat) q = q.Where(c => c.Category!.Code == cat);
         if (Clean(f.SubCategoryCode) is { } sub) q = q.Where(c => c.SubCategory!.Code == sub);
         if (Clean(f.Status) is { } status) q = q.Where(c => c.StatusCode == status);
@@ -331,6 +552,7 @@ public sealed class ComplaintService(
         if (f.FromDate is { } from) q = q.Where(c => c.CreatedAt >= IstDate.StartOfDayUtc(from));
         if (f.ToDate is { } to) q = q.Where(c => c.CreatedAt < IstDate.StartOfDayUtc(to.AddDays(1)));
         if (f.OverdueOnly == true) q = q.Where(c => c.ClosedAt == null && c.SlaDueDate != null && c.SlaDueDate < now);
+        if (f.MinEscalationLevel is { } minLevel) q = q.Where(c => c.EscalationLevel >= minLevel);
         return q;
     }
 }

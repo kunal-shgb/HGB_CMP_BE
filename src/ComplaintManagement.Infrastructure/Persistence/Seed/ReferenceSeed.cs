@@ -6,7 +6,8 @@ namespace ComplaintManagement.Infrastructure.Persistence.Seed;
 
 /// <summary>
 /// Initial configuration seeded by migrations. Categories and statuses follow the product spec
-/// (sections 14 and 15). The transition set and default priority are PROVISIONAL until the Bank
+/// (sections 14 and 15). Maker/Checker role mappings match the Bank IAM accessRole values.
+/// The transition set, which moves need Checker approval, and the default priority are PROVISIONAL until the Bank
 /// confirms its workflow; change them with a new migration or through the admin screens.
 /// TAT values are deliberately left null because the Bank has not fixed them yet.
 /// </summary>
@@ -23,6 +24,7 @@ internal static class ReferenceSeed
         new() { Code = "CUSTOMER_RESPONSE", Name = "Awaiting customer response", CustomerLabel = "Awaiting your response", SortOrder = 50 },
         new() { Code = "ESCALATED", Name = "Escalated", CustomerLabel = "Under process", SortOrder = 60 },
         new() { Code = "TRANSFERRED", Name = "Transferred", CustomerLabel = "Under process", SortOrder = 70 },
+        new() { Code = "PENDING_APPROVAL", Name = "Pending checker approval", CustomerLabel = "Under process", IsApprovalPending = true, SortOrder = 75 },
         new() { Code = "RESOLVED", Name = "Resolved", CustomerLabel = "Resolved", IsResolution = true, SortOrder = 80 },
         new() { Code = "REOPENED", Name = "Reopened", CustomerLabel = "Reopened", SortOrder = 90 },
         new() { Code = "CLOSED", Name = "Closed", CustomerLabel = "Closed", IsTerminal = true, SortOrder = 100 },
@@ -47,9 +49,37 @@ internal static class ReferenceSeed
         ("REOPENED", "ASSIGNED", false), ("REOPENED", "UNDER_PROCESS", false),
     ];
 
+    /// <summary>Decisions a Maker cannot finalise alone: a Checker must approve them.</summary>
+    private static readonly HashSet<string> ApprovalTargets = ["RESOLVED", "REJECTED", "DUPLICATE"];
+
     public static readonly ComplaintStatusTransition[] Transitions = TransitionRows
-        .Select((t, i) => new ComplaintStatusTransition { Id = i + 1, FromStatusCode = t.From, ToStatusCode = t.To, RequiresRemark = t.Remark })
+        .Select((t, i) => new ComplaintStatusTransition
+        {
+            Id = i + 1,
+            FromStatusCode = t.From,
+            ToStatusCode = t.To,
+            RequiresRemark = t.Remark,
+            RequiresApproval = ApprovalTargets.Contains(t.To),
+        })
         .ToArray();
+
+    /// <summary>The Bank IAM accessRole values and the application roles they grant.</summary>
+    public static readonly ApplicationRoleMapping[] RoleMappings =
+    [
+        new() { Id = StableGuid("role:Maker"), IamRole = "Maker", ApplicationRole = "MAKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new() { Id = StableGuid("role:Checker"), IamRole = "Checker", ApplicationRole = "CHECKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new() { Id = StableGuid("role:Admin"), IamRole = "Admin", ApplicationRole = "ADMIN", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+    ];
+
+    /// <summary>Admin-managed settings. The HO checking department is left unset until the Bank names it.</summary>
+    public static readonly AppSetting[] Settings =
+    [
+        new() { Key = AppSettingKeys.HeadOfficeMakerCheckerDepartment, Value = null, UpdatedAt = SeededAt },
+        // Provisional escalation rules until the Bank sets them: to the RO as soon as the TAT is missed, to HO a week later.
+        new() { Key = AppSettingKeys.EscalationEnabled, Value = "true", UpdatedAt = SeededAt },
+        new() { Key = AppSettingKeys.EscalateToRegionalOfficeAfterDays, Value = "0", UpdatedAt = SeededAt },
+        new() { Key = AppSettingKeys.EscalateToHeadOfficeAfterDays, Value = "7", UpdatedAt = SeededAt },
+    ];
 
     public static readonly ComplaintPriority[] Priorities =
     [

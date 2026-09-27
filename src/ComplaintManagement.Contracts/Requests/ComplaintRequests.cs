@@ -19,6 +19,8 @@ public sealed record ComplaintFilterRequest
     public DateOnly? FromDate { get; init; }
     public DateOnly? ToDate { get; init; }
     public bool? OverdueOnly { get; init; }
+    /// <summary>Only complaints escalated to at least this level (2 = Regional Office, 3 = Head Office).</summary>
+    public int? MinEscalationLevel { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -28,6 +30,12 @@ public sealed record ChangeStatusRequest(string NewStatus, string? Remarks);
 public sealed record AssignComplaintRequest(string AssignedToEmployeeId, string? DepartmentCode, string? Remarks);
 
 public sealed record AddRemarkRequest(string Remark, string Visibility);
+
+/// <summary>Escalate a complaint one level up. A reason is required.</summary>
+public sealed record EscalateRequest(string Remarks);
+
+/// <summary>Checker decision. Remarks are required when returning a request to the Maker.</summary>
+public sealed record DecideApprovalRequest(string? Remarks);
 
 /// <summary>Complaint lodged by a customer through the Bank website.</summary>
 public sealed record PublicCreateComplaintRequest
@@ -45,4 +53,13 @@ public sealed record PublicCreateComplaintRequest
     public decimal? Amount { get; init; }
     public required string Description { get; init; }
     public string? PreferredChannel { get; init; }
+}
+
+/// <summary>Customer asks for a one-time code to view a complaint.</summary>
+public sealed record TrackingOtpRequest(string ComplaintNumber, string Mobile);
+
+/// <summary>Customer submits the one-time code.</summary>
+public sealed record TrackingVerifyRequest(string ComplaintNumber, string Mobile, string Otp)
+{
+    public override string ToString() => $"TrackingVerifyRequest {{ ComplaintNumber = {ComplaintNumber} }}";
 }

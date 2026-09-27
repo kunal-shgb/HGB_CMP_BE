@@ -1,37 +1,22 @@
-using ComplaintManagement.Domain.Enums;
-
 namespace ComplaintManagement.Application.Common.Security;
 
-/// <summary>Application roles. IAM roles are mapped onto these through application_role_mapping.</summary>
+/// <summary>
+/// Application roles decide what a user may do. The Bank IAM accessRole is mapped onto these through
+/// application_role_mapping. Which complaints a user sees comes from their office, not the role.
+/// </summary>
 public static class AppRoles
 {
-    public const string SuperAdmin = "SUPER_ADMIN";
-    public const string HoAdmin = "HO_ADMIN";
-    public const string HoDepartmentUser = "HO_DEPARTMENT_USER";
-    public const string RegionalOfficeUser = "REGIONAL_OFFICE_USER";
-    public const string BranchUser = "BRANCH_USER";
-    public const string NodalOfficer = "NODAL_OFFICER";
-    public const string Management = "MANAGEMENT";
-    public const string Auditor = "AUDITOR";
+    /// <summary>Works complaints: updates status, assigns within the office, adds remarks, proposes decisions.</summary>
+    public const string Maker = "MAKER";
 
-    public static readonly IReadOnlyList<string> All =
-        [SuperAdmin, HoAdmin, HoDepartmentUser, RegionalOfficeUser, BranchUser, NodalOfficer, Management, Auditor];
+    /// <summary>
+    /// Approves or returns a Maker's decision and can assign complaints. Branch Makers are checked by their RO,
+    /// RO Makers by HO, HO Makers by the designated HO department.
+    /// </summary>
+    public const string Checker = "CHECKER";
 
-    /// <summary>The widest organisational scope granted by any of the user's roles.</summary>
-    public static ScopeLevel ResolveScope(IEnumerable<string> roles)
-    {
-        var level = ScopeLevel.Branch;
-        foreach (var role in roles)
-        {
-            var roleLevel = role switch
-            {
-                SuperAdmin or HoAdmin or NodalOfficer or Management or Auditor => ScopeLevel.HeadOffice,
-                HoDepartmentUser => ScopeLevel.Department,
-                RegionalOfficeUser => ScopeLevel.Region,
-                _ => ScopeLevel.Branch,
-            };
-            if (roleLevel > level) level = roleLevel;
-        }
-        return level;
-    }
+    /// <summary>Manages categories and workflow settings.</summary>
+    public const string Admin = "ADMIN";
+
+    public static readonly IReadOnlyList<string> All = [Maker, Checker, Admin];
 }

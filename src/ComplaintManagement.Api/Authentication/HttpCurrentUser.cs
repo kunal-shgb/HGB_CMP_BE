@@ -2,10 +2,11 @@ using System.Security.Claims;
 using ComplaintManagement.Application.Common.Interfaces;
 using ComplaintManagement.Application.Common.Security;
 using ComplaintManagement.Domain.Enums;
+using Microsoft.Extensions.Options;
 
 namespace ComplaintManagement.Api.Authentication;
 
-public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUser
+public sealed class HttpCurrentUser(IHttpContextAccessor accessor, IOptions<OfficeScopeOptions> officeScopes) : ICurrentUser
 {
     private ClaimsPrincipal Principal =>
         accessor.HttpContext?.User is { Identity.IsAuthenticated: true } user
@@ -16,14 +17,15 @@ public sealed class HttpCurrentUser(IHttpContextAccessor accessor) : ICurrentUse
     private IReadOnlySet<string>? _permissions;
 
     public string EmployeeId => Principal.FindFirstValue(CmpClaimTypes.EmployeeId)
-        ?? throw new InvalidOperationException("Authenticated principal has no employee ID claim.");
+        ?? throw new InvalidOperationException("Authenticated principal has no employee code claim.");
     public string Name => Principal.FindFirstValue(CmpClaimTypes.Name) ?? EmployeeId;
     public string? Designation => Principal.FindFirstValue(CmpClaimTypes.Designation);
     public IReadOnlySet<string> Roles => _roles ??= Principal.FindAll(CmpClaimTypes.AppRole).Select(c => c.Value).ToHashSet();
-    public ScopeLevel ScopeLevel => AppRoles.ResolveScope(Roles);
-    public string? RegionCode => Principal.FindFirstValue(CmpClaimTypes.Region);
-    public string? BranchCode => Principal.FindFirstValue(CmpClaimTypes.Branch);
-    public string? DepartmentCode => Principal.FindFirstValue(CmpClaimTypes.Department);
+    public ScopeLevel? ScopeLevel => officeScopes.Value.Resolve(OfficeType);
+    public string? OfficeType => Principal.FindFirstValue(CmpClaimTypes.OfficeType);
+    public string? OfficeCode => Principal.FindFirstValue(CmpClaimTypes.OfficeCode);
+    public string? OfficeName => Principal.FindFirstValue(CmpClaimTypes.OfficeName);
+    public string? DepartmentName => Principal.FindFirstValue(CmpClaimTypes.DepartmentName);
     public string? IpAddress => accessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
     public string? UserAgent => accessor.HttpContext?.Request.Headers.UserAgent.ToString();
 
