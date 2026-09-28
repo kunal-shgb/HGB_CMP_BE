@@ -15,8 +15,17 @@ public static class AppRoles
     /// </summary>
     public const string Checker = "CHECKER";
 
-    /// <summary>Manages categories and workflow settings.</summary>
+    /// <summary>
+    /// Branch head (IAM accessRole "OfficeHead" at a Branch). The only branch role that works complaints;
+    /// the people they assign a complaint to can work that complaint too.
+    /// </summary>
+    public const string OfficeHead = "OFFICE_HEAD";
+
+    /// <summary>Every signed-in employee: can see complaints in their office scope (customer details masked).</summary>
+    public const string Viewer = "VIEWER";
+
+    /// <summary>Manages categories and workflow settings. Granted by the IAM's isSystemAdmin flag.</summary>
     public const string Admin = "ADMIN";
 
-    public static readonly IReadOnlyList<string> All = [Maker, Checker, Admin];
+    public static readonly IReadOnlyList<string> All = [Maker, Checker, OfficeHead, Viewer, Admin];
 }

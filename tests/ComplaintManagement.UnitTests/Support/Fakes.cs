@@ -34,8 +34,26 @@ internal sealed class FakeAudit : IAuditLogger
     public void Log(string action, string module, string? recordId, string? details = null) => Entries.Add((action, module, recordId));
 }
 
+/// <summary>The seeded role mappings: OfficeHead at branches, Maker/Checker at RO and HO.</summary>
+internal sealed class FakeRoleMappings : IRoleMappingService
+{
+    public static readonly RoleMapping[] Seeded =
+    [
+        new("OfficeHead", "Branch", AppRoles.OfficeHead),
+        new("Maker", "Regional Office", AppRoles.Maker), new("Maker", "Head Office", AppRoles.Maker),
+        new("Checker", "Regional Office", AppRoles.Checker), new("Checker", "Head Office", AppRoles.Checker),
+    ];
+
+    public Task<IReadOnlyList<RoleMapping>> GetActiveMappingsAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<RoleMapping>>(Seeded);
+
+    public static AssignmentPolicy Policy(IIamUserService iam) => new(iam, new FakeRoleMappings());
+}
+
 internal static class Staff
 {
+    public static IamUser Head(string code, string branch, bool active = true) =>
+        new(code, $"Head {code}", null, "OfficeHead", "Branch", branch, branch, null, active);
+
     public static IamUser At(string code, string officeType, string officeCode, bool active = true) =>
         new(code, $"Officer {code}", null, "Maker", officeType, officeCode, officeCode, null, active);
 }
@@ -46,6 +64,8 @@ internal sealed class FakeIam(params IamUser[] users) : IIamUserService
         Task.FromResult(users.FirstOrDefault(u => u.EmployeeCode == employeeId));
     public Task<IReadOnlyList<IamUser>> SearchUsersAsync(string? query, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<IamUser>>(users);
+    public Task<IReadOnlyList<IamUser>> GetUsersInOfficeAsync(string officeCode, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<IamUser>>(users.Where(u => u.OfficeCode == officeCode).ToList());
 }
 
 internal sealed class FixedClock(DateTimeOffset now) : TimeProvider

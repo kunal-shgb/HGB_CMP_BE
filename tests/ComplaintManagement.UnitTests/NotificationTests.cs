@@ -18,10 +18,15 @@ public class CustomerNotificationTests
 
     public CustomerNotificationTests() => _data = TestData.Seed(_db);
 
-    private ComplaintService Service(FakeUser user) => new(
-        _db, user, new FakeAudit(), new FakeIam(Staff.At("E-A1", "Branch", "A1")), _data.Org, _clock, Options.Create(new SlaOptions()),
+    private ComplaintService Service(FakeUser user)
+    {
+        var iam = new FakeIam(Staff.At("E-A1", "Branch", "A1"));
+        return new(
+        _db, user, new FakeAudit(), iam, _data.Org, _clock, Options.Create(new SlaOptions()),
         new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
-        new CustomerNotifier(_db, _clock));
+        new CustomerNotifier(_db, _clock),
+        FakeRoleMappings.Policy(iam));
+    }
 
     private static FakeUser Maker => FakeUser.AtBranch("E-A1", "A1", AppRoles.Maker);
     private static FakeUser Checker => FakeUser.AtRegion("E-RC", "RA", AppRoles.Checker);
@@ -43,8 +48,10 @@ public class CustomerNotificationTests
         await Service(Maker).AssignAsync(c.Id, new AssignComplaintRequest("E-A1", null, null), default);
         // Assigned → Under process: "Under review" → "Under process" is visible.
         await Service(Maker).ChangeStatusAsync(c.Id, new ChangeStatusRequest("UNDER_PROCESS", null), default);
-        Assert.Equal(["STATUS_UPDATE", "STATUS_UPDATE"], _db.Notifications.OrderBy(n => n.CreatedAt).Select(n => n.Event));
-        Assert.Contains("Under process", _db.Notifications.OrderBy(n => n.Id).Last().Body);
+        Assert.Equal(["STATUS_UPDATE", "STATUS_UPDATE"], _db.Notifications.Select(n => n.Event));
+        // Both happen at the same (fixed) time, so check the contents rather than their order.
+        Assert.Contains(_db.Notifications, n => n.Body.Contains("Under review"));
+        Assert.Contains(_db.Notifications, n => n.Body.Contains("Under process"));
     }
 
     [Fact]

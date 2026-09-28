@@ -15,7 +15,7 @@ internal sealed class MockIamAuthenticator(MockIamDbContext db) : IIamAuthentica
     }
 
     internal static IamUser ToIamUser(MockIamUser u) =>
-        new(u.EmployeeCode, u.FullName, u.Designation, u.AccessRole, u.OfficeType, u.OfficeCode, u.OfficeName, u.DepartmentName, u.IsActive);
+        new(u.EmployeeCode, u.FullName, u.Designation, u.AccessRole, u.OfficeType, u.OfficeCode, u.OfficeName, u.DepartmentName, u.IsActive, u.IsSystemAdmin);
 }
 
 /// <summary>Employee directory backed by the mock IAM users table.</summary>
@@ -25,6 +25,12 @@ internal sealed class MockIamUserService(MockIamDbContext db) : IIamUserService
     {
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.EmployeeCode == employeeCode, cancellationToken);
         return user is null ? null : MockIamAuthenticator.ToIamUser(user);
+    }
+
+    public async Task<IReadOnlyList<IamUser>> GetUsersInOfficeAsync(string officeCode, CancellationToken cancellationToken = default)
+    {
+        var rows = await db.Users.AsNoTracking().Where(u => u.OfficeCode == officeCode).ToListAsync(cancellationToken);
+        return rows.Select(MockIamAuthenticator.ToIamUser).ToList();
     }
 
     public async Task<IReadOnlyList<IamUser>> SearchUsersAsync(string? query, CancellationToken cancellationToken = default)

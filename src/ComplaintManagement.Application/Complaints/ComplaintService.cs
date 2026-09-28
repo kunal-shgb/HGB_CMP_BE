@@ -42,7 +42,8 @@ public sealed class ComplaintService(
     IValidator<ChangeStatusRequest> statusValidator,
     IValidator<AssignComplaintRequest> assignValidator,
     IValidator<AddRemarkRequest> remarkValidator,
-    CustomerNotifier notifier) : IComplaintService
+    CustomerNotifier notifier,
+    AssignmentPolicy assignment) : IComplaintService
 {
     private const string Module = "Complaint";
 
@@ -89,7 +90,7 @@ public sealed class ComplaintService(
     public async Task<ComplaintDetail> GetAsync(Guid id, CancellationToken ct)
     {
         var c = await LoadScopedAsync(id, ct, includeChildren: true);
-        var unmasked = user.HasPermission(Permissions.ComplaintViewUnmasked);
+        var unmasked = ComplaintAccess.Can(user, c, Permissions.ComplaintViewUnmasked);
         var now = clock.GetUtcNow();
 
         var transitions = await (
@@ -100,7 +101,7 @@ public sealed class ComplaintService(
                 select new AllowedTransition(s.Code, s.Name, t.RequiresRemark, t.RequiresApproval))
             .ToListAsync(ct);
 
-        if (!user.HasPermission(Permissions.ComplaintChangeStatus)) transitions = [];
+        if (!ComplaintAccess.Can(user, c, Permissions.ComplaintChangeStatus)) transitions = [];
 
         var pending = await db.ComplaintApprovals.AsNoTracking()
             .FirstOrDefaultAsync(a => a.ComplaintId == c.Id && a.Status == ApprovalStatus.Pending, ct);
@@ -158,7 +159,8 @@ public sealed class ComplaintService(
             pendingInfo,
             c.Remarks.OrderByDescending(r => r.CreatedAt).Select(ToRemarkItem).ToList(),
             c.Attachments.OrderBy(a => a.UploadedAt)
-                .Select(Attachments.AttachmentService.ToItem).ToList());
+                .Select(Attachments.AttachmentService.ToItem).ToList(),
+            ComplaintAccess.Abilities(user, c, NextEscalationLevel(c) is not null, await assignment.CanAssignAsync(user, c, ct)));
     }
 
     public async Task<IReadOnlyList<TimelineEvent>> GetHistoryAsync(Guid id, CancellationToken ct)
@@ -202,6 +204,7 @@ public sealed class ComplaintService(
     {
         await statusValidator.ValidateAndThrowAsync(request, ct);
         var c = await LoadScopedAsync(id, ct, includeChildren: false);
+        ComplaintAccess.Demand(user, c, Permissions.ComplaintChangeStatus);
 
         if (await db.ComplaintApprovals.AnyAsync(a => a.ComplaintId == c.Id && a.Status == ApprovalStatus.Pending, ct))
             throw new DomainException("approval.pending", "This complaint is waiting for a Checker's decision.");
@@ -343,6 +346,7 @@ public sealed class ComplaintService(
     {
         await assignValidator.ValidateAndThrowAsync(request, ct);
         var c = await LoadScopedAsync(id, ct, includeChildren: false);
+        await assignment.DemandAsync(user, c, ct);
 
         var status = await db.Statuses.AsNoTracking().SingleAsync(s => s.Code == c.StatusCode, ct);
         if (status.IsTerminal)
@@ -398,6 +402,7 @@ public sealed class ComplaintService(
     {
         await remarkValidator.ValidateAndThrowAsync(request, ct);
         var c = await LoadScopedAsync(id, ct, includeChildren: false);
+        ComplaintAccess.Demand(user, c, Permissions.ComplaintAddRemark);
 
         var remark = new ComplaintRemark
         {
@@ -425,6 +430,7 @@ public sealed class ComplaintService(
             throw new DomainException("escalation.remark_too_long", "Keep the reason under 4,000 characters.");
 
         var c = await LoadScopedAsync(id, ct, includeChildren: false);
+        ComplaintAccess.Demand(user, c, Permissions.ComplaintEscalate);
         var target = NextEscalationLevel(c)
             ?? throw new DomainException("escalation.not_allowed", c.ClosedAt is not null
                 ? "A closed complaint cannot be escalated."
@@ -449,7 +455,7 @@ public sealed class ComplaintService(
     /// </summary>
     private int? NextEscalationLevel(Complaint c)
     {
-        if (!user.HasPermission(Permissions.ComplaintEscalate) || c.ClosedAt is not null) return null;
+        if (!ComplaintAccess.Can(user, c, Permissions.ComplaintEscalate) || c.ClosedAt is not null) return null;
         int? own = user.ScopeLevel switch
         {
             ScopeLevel.Branch => EscalationLevels.Branch,

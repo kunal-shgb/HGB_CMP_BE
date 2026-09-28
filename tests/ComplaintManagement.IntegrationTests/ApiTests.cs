@@ -36,7 +36,8 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     }
 
     [Theory]
-    [InlineData("300001", "MAKER", "Branch", "BR-ROH-001")]
+    [InlineData("300001", "OFFICE_HEAD", "Branch", "BR-ROH-001")]
+    [InlineData("300005", "VIEWER", "Branch", "BR-ROH-001")]
     [InlineData("200001", "CHECKER", "Region", "RO-ROH")]
     [InlineData("100001", "CHECKER", "HeadOffice", "0000")]
     [InlineData("900001", "ADMIN", "HeadOffice", "0000")]
@@ -44,7 +45,8 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     {
         var me = await (await factory.ClientForAsync(code)).GetFromJsonAsync<CurrentUserResponse>("/api/v1/me");
         Assert.NotNull(me);
-        Assert.Equal([role], me.Roles);
+        Assert.Contains(role, me.Roles);
+        Assert.Contains("VIEWER", me.Roles); // every employee can view
         Assert.Equal(scope, me.ScopeLevel);
         Assert.Equal(officeCode, me.OfficeCode);
     }
@@ -80,6 +82,49 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var escalated = await ro.GetFromJsonAsync<PagedResponse<ComplaintListItem>>("/api/v1/complaints?minEscalationLevel=2&pageSize=100");
         Assert.Contains(escalated!.Items, i => i.Id == id && i.EscalationLevel == 2);
         Assert.Equal(HttpStatusCode.Forbidden, (await (await factory.ClientForAsync("900001")).PostAsJsonAsync($"/api/v1/complaints/{id}/escalate", new EscalateRequest("x"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Branch_staff_act_only_on_complaints_their_office_head_assigns_them()
+    {
+        var head = await factory.ClientForAsync("300001");
+        var clerk = await factory.ClientForAsync("300005");
+        var id = (await head.GetFromJsonAsync<PagedResponse<ComplaintListItem>>("/api/v1/complaints?status=UNDER_PROCESS&branchCode=BR-ROH-001&pageSize=1"))!.Items[0].Id;
+
+        // View only: masked, and every action refused.
+        var seen = await clerk.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{id}");
+        Assert.True(seen!.Customer.IsMasked);
+        Assert.False(seen.Abilities.AddRemark);
+        Assert.Equal(HttpStatusCode.Forbidden, (await clerk.PostAsJsonAsync($"/api/v1/complaints/{id}/remarks", new AddRemarkRequest("x", "INTERNAL"))).StatusCode);
+
+        // The office head sees the clerk in the assignable list and assigns the complaint.
+        var staff = await head.GetFromJsonAsync<List<EmployeeResponse>>("/api/v1/employees");
+        Assert.Contains(staff!, e => e.EmployeeId == "300005");
+        Assert.Equal(HttpStatusCode.NoContent, (await head.PostAsJsonAsync($"/api/v1/complaints/{id}/assign", new AssignComplaintRequest("300005", null, "Please handle"))).StatusCode);
+
+        var assigned = await clerk.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{id}");
+        Assert.True(assigned!.Abilities is { AddRemark: true, ChangeStatus: true, IsAssignedToMe: true, Assign: false });
+        Assert.False(assigned.Customer.IsMasked);
+        Assert.Equal(HttpStatusCode.OK, (await clerk.PostAsJsonAsync($"/api/v1/complaints/{id}/remarks", new AddRemarkRequest("Called the customer", "INTERNAL"))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await clerk.PostAsJsonAsync($"/api/v1/complaints/{id}/assign", new AssignComplaintRequest("300001", null, null))).StatusCode);
+    }
+
+    [Fact]
+    public async Task RO_checker_assigns_only_at_branches_without_an_office_head()
+    {
+        var checker = await factory.ClientForAsync("200001");
+        async Task<Guid> OpenAt(string branch) =>
+            (await checker.GetFromJsonAsync<PagedResponse<ComplaintListItem>>($"/api/v1/complaints?branchCode={branch}&status=RECEIVED&pageSize=1"))!.Items[0].Id;
+
+        // Rohtak Main has an OfficeHead (300001).
+        var withHead = await OpenAt("BR-ROH-001");
+        Assert.False((await checker.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{withHead}"))!.Abilities.Assign);
+        Assert.Equal(HttpStatusCode.Forbidden, (await checker.PostAsJsonAsync($"/api/v1/complaints/{withHead}/assign", new AssignComplaintRequest("200003", null, null))).StatusCode);
+
+        // Meham has no OfficeHead, so the RO Checker steps in.
+        var noHead = await OpenAt("BR-ROH-003");
+        Assert.True((await checker.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{noHead}"))!.Abilities.Assign);
+        Assert.Equal(HttpStatusCode.NoContent, (await checker.PostAsJsonAsync($"/api/v1/complaints/{noHead}/assign", new AssignComplaintRequest("200003", null, "Branch has no head"))).StatusCode);
     }
 
     [Fact]

@@ -29,10 +29,16 @@ public static class MockIamSetup
         var options = scope.ServiceProvider.GetRequiredService<IOptions<MockIamOptions>>().Value;
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(MockIamSetup));
 
-        var present = await db.Database
-            .SqlQuery<string>($"SELECT table_name AS \"Value\" FROM information_schema.tables WHERE table_schema = 'mock_iam'")
-            .ToListAsync(ct);
-        if (!MockIamDbContext.Tables.All(present.Contains))
+        // Rebuild when any table or column the model expects is missing: the store is disposable scaffolding.
+        var present = (await db.Database
+            .SqlQuery<string>($"SELECT table_name || '.' || column_name AS \"Value\" FROM information_schema.columns WHERE table_schema = 'mock_iam'")
+            .ToListAsync(ct)).ToHashSet();
+        var expected = db.Model.GetEntityTypes().SelectMany(e =>
+        {
+            var table = Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Table(e.GetTableName()!, e.GetSchema());
+            return e.GetProperties().Select(p => $"{e.GetTableName()}.{p.GetColumnName(table)}");
+        });
+        if (!expected.All(present.Contains))
         {
             // The mock store is disposable test scaffolding: rebuild it whenever its shape changes.
             logger.LogWarning("Creating temporary mock IAM store (schema {Schema})", MockIamDbContext.Schema);
@@ -62,7 +68,7 @@ public static class MockIamSetup
             {
                 EmployeeCode = u.EmployeeCode, FullName = u.FullName, Designation = u.Designation, AccessRole = u.AccessRole,
                 DepartmentId = u.DepartmentId, DepartmentName = u.DepartmentName, OfficeId = u.OfficeId, OfficeCode = u.OfficeCode,
-                OfficeName = u.OfficeName, OfficeType = u.OfficeType, Mobile = u.Mobile, IsActive = u.IsActive,
+                OfficeName = u.OfficeName, OfficeType = u.OfficeType, Mobile = u.Mobile, IsActive = u.IsActive, IsSystemAdmin = u.IsSystemAdmin,
                 PasswordHash = MockPasswordHasher.Hash(options.SeedPassword!), CreatedAt = now, UpdatedAt = now,
             });
         }

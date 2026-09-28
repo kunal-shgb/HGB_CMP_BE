@@ -26,6 +26,8 @@ public static class Permissions
     {
         [AppRoles.Maker] = [ComplaintView, ComplaintViewUnmasked, ComplaintAssign, ComplaintChangeStatus, ComplaintAddRemark, ComplaintAddAttachment, ComplaintEscalate, DashboardView, ReportView],
         [AppRoles.Checker] = [ComplaintView, ComplaintViewUnmasked, ComplaintApprove, ComplaintAssign, ComplaintAddRemark, ComplaintAddAttachment, ComplaintEscalate, DashboardView, ReportView],
+        [AppRoles.OfficeHead] = [ComplaintView, ComplaintViewUnmasked, ComplaintAssign, ComplaintChangeStatus, ComplaintAddRemark, ComplaintAddAttachment, ComplaintEscalate, DashboardView, ReportView],
+        [AppRoles.Viewer] = [ComplaintView, DashboardView],
         [AppRoles.Admin] = [AdminManage, ComplaintView, DashboardView, ReportView],
     };
 

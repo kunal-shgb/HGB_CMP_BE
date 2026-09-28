@@ -5,6 +5,9 @@ public interface IIamUserService
 {
     Task<IamUser?> GetUserAsync(string employeeCode, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<IamUser>> SearchUsersAsync(string? query, CancellationToken cancellationToken = default);
+
+    /// <summary>Everyone the IAM lists at an office (branch or RO code), active or not.</summary>
+    Task<IReadOnlyList<IamUser>> GetUsersInOfficeAsync(string officeCode, CancellationToken cancellationToken = default);
 }
 
 /// <summary>What the portal needs from an IAM user profile. Contact details are deliberately left out.</summary>
@@ -17,4 +20,5 @@ public sealed record IamUser(
     string? OfficeCode,
     string? OfficeName,
     string? DepartmentName,
-    bool IsActive);
+    bool IsActive,
+    bool IsSystemAdmin = false);

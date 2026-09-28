@@ -16,9 +16,6 @@ public sealed class MockIamDbContext(DbContextOptions<MockIamDbContext> options)
     public DbSet<MockIamBranch> Branches => Set<MockIamBranch>();
     public DbSet<MockIamDepartment> Departments => Set<MockIamDepartment>();
 
-    /// <summary>Tables the mock store must have; if any is missing the schema is rebuilt.</summary>
-    public static readonly string[] Tables = ["users", "regions", "branches", "departments"];
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema(Schema);

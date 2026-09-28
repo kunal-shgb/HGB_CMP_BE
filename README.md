@@ -119,29 +119,38 @@ Until the Bank IAM login API is integrated, sign-in checks a dummy users table i
 
 | Code | Access role | Office |
 |---|---|---|
-| 300001 | Maker | Rohtak Main (branch, RO Rohtak) |
-| 300002 | Maker | Sampla (branch, RO Rohtak) |
-| 300003 | Maker | Hisar City (branch, RO Hisar) |
-| 300004 | Maker | Karnal Sector 12 (branch, RO Karnal) |
+| 300001 | OfficeHead | Rohtak Main (branch, RO Rohtak) |
+| 300005 | NoRole (view; acts on assigned complaints) | Rohtak Main |
+| 300002 | OfficeHead | Sampla (branch, RO Rohtak) |
+| 300003 | OfficeHead | Hisar City (branch, RO Hisar) |
+| 300004 | OfficeHead | Karnal Sector 12 (branch, RO Karnal) |
+| 300010 | OfficeHead | Jhajjar Main (branch, RO Jhajjar; no sample complaints) |
+| 300011 | NoRole (view; acts on assigned complaints) | Jhajjar Main |
 | 200003 | Maker | RO Rohtak |
 | 200001 | Checker | RO Rohtak |
 | 200002 | Checker | RO Hisar |
 | 200004 | Checker | RO Karnal |
+| 200010 | Checker | RO Jhajjar |
 | 100002 | Maker | Head Office, CSD |
 | 100003 | Maker | Head Office, DBD |
 | 100001 | Checker | Head Office, CSD (checks HO Makers in dev data) |
 | 100004 | Checker | Head Office, DBD |
-| 900001 | Admin | Head Office, DBD |
-| 300099 | Maker (inactive) | always refused |
+| 900001 | NoRole + isSystemAdmin (Admin) | Head Office, DBD |
+| 300099 | NoRole (inactive) | always refused |
 
 The mock IAM also holds sample Regional Offices, branches and departments (`mock_iam.regions`, `mock_iam.branches`, `mock_iam.departments`, seeded from `MockIamSeedData.cs`). The 120 sample complaints are seeded only in Development. None of this is real Bank data.
 
 ## Identity, visibility and maker-checker
 
-The Bank IAM login API returns a user profile (`employeeCode`, `fullName`, `designation`, `accessRole`, `officeType`, `officeCode`, `officeName`, `departmentName`, `isActive`, ...). `Infrastructure/IAM` holds the model and the HTTP client (`IAM:BaseUrl` + `IAM:LoginPath`). Inactive employees are refused. Every sign-in attempt writes an `audit_logs` row (`LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGIN_INACTIVE`), and a wrong code, wrong password and inactive employee all get the same response.
+The Bank IAM login API returns a user profile (`employeeCode`, `fullName`, `designation`, `accessRole`, `isSystemAdmin`, `officeType`, `officeCode`, `officeName`, `departmentName`, `isActive`, `lastLogin`, `createdAt`, ...). `Infrastructure/IAM` holds the model and the HTTP client (`IAM:BaseUrl` + `IAM:LoginPath`). Inactive employees are refused. Every sign-in attempt writes an `audit_logs` row (`LOGIN_SUCCESS`, `LOGIN_FAILED`, `LOGIN_INACTIVE`), and a wrong code, wrong password and inactive employee all get the same response.
 
 - **What a user sees** comes from `officeType` + `officeCode`: Branch → complaints logged for that branch; Regional Office → complaints of every branch under it; Head Office → all complaints. A complaint assigned to the user personally is also visible. `OfficeScopes:Map` in appsettings maps the IAM officeType strings. Branch and RO codes from the IAM organisation data match the IAM `officeCode` values.
-- **What a user does** comes from `accessRole` via `application_role_mapping` (seeded: `Maker` → MAKER, `Checker` → CHECKER, `Admin` → ADMIN). Makers update status, assign within their office and add remarks. Checkers approve or return Makers' decisions, assign within their office and add remarks. Admins manage categories, sub-categories (TAT, default priority and department), status labels, status transitions and approval routing under `/api/v1/admin`; they can view complaints (masked) but not work them.
+- **What a user does** comes from the IAM profile:
+  - Every signed-in employee is a **Viewer**: they see complaints in their office scope with customer details masked, and cannot act.
+  - At a **Branch**, only the **OfficeHead** (`accessRole: "OfficeHead"`) works complaints: status, assignment, remarks, attachments, escalation. Other branch staff (for example `NoRole`) only view, until the OfficeHead **assigns** them a complaint; the assignee may then do everything on that complaint except reassign it, and sees full customer details. Rights move with the assignment.
+  - At **Regional Offices and Head Office**, `Maker` and `Checker` work as before (Makers work complaints, Checkers approve and can assign). An **RO Checker** may assign a branch's complaint only when that branch has no active OfficeHead in the IAM directory (`AssignmentPolicy`); otherwise the branch OfficeHead assigns it. RO/HO Makers and HO Checkers keep their assignment rights.
+  - **Admin** comes from the IAM `isSystemAdmin` flag, not the access role.
+  - Mappings live in `application_role_mapping` (with an optional `office_type`); per-complaint rights are decided by `ComplaintAccess` in the Application layer, and `GET /complaints/{id}` returns them as `abilities` for the UI.
 - **Maker-checker.** Moves flagged `requires_approval` in `complaint_status_transitions` (seeded: to Resolved, Rejected, Duplicate) do not apply when a Maker requests them. The complaint goes to *Pending checker approval* and a `complaint_approvals` row routes it: a Branch Maker's request to a Checker at that branch's RO; an RO Maker's request to any HO Checker; an HO Maker's request to a Checker of the HO department set by the Admin (`app_settings` key `approvals.ho_maker_checker_department`; any HO Checker while unset). Approve applies the requested status; Return (remark required) puts the complaint back where it was. No one decides their own request, only one request per complaint can be open, and an `xmin` concurrency check stops two Checkers deciding the same request.
 
 ## Escalation

@@ -24,10 +24,15 @@ public class ComplaintWorkflowTests
 
     public ComplaintWorkflowTests() => _data = TestData.Seed(_db);
 
-    private ComplaintService Service(ICurrentUser user) => new(
-        _db, user, _audit, new FakeIam(BranchA1Officer, BranchB1Officer), _data.Org, _clock, Options.Create(new SlaOptions()),
+    private ComplaintService Service(ICurrentUser user)
+    {
+        var iam = new FakeIam(BranchA1Officer, BranchB1Officer);
+        return new(
+        _db, user, _audit, iam, _data.Org, _clock, Options.Create(new SlaOptions()),
         new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
-        new ComplaintManagement.Application.Notifications.CustomerNotifier(_db, _clock));
+        new ComplaintManagement.Application.Notifications.CustomerNotifier(_db, _clock),
+        FakeRoleMappings.Policy(iam));
+    }
 
     private static FakeUser HoAdmin => new("E1001", AppRoles.Maker);
     private static FakeUser BranchMaker => FakeUser.AtBranch("E-A1", "A1", AppRoles.Maker);

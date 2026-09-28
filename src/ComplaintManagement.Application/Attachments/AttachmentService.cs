@@ -35,6 +35,7 @@ public sealed class AttachmentService(
     {
         var complaint = await db.Complaints.VisibleTo(user).FirstOrDefaultAsync(c => c.Id == complaintId, ct)
             ?? throw new NotFoundException("Complaint", complaintId);
+        ComplaintAccess.Demand(user, complaint, Permissions.ComplaintAddAttachment);
 
         var existing = await db.ComplaintAttachments.CountAsync(a => a.ComplaintId == complaintId, ct);
         if (existing + files.Count > options.Value.MaxFilesPerComplaint)
@@ -57,15 +58,15 @@ public sealed class AttachmentService(
 
     public async Task<AttachmentDownload> OpenAsync(Guid complaintId, Guid attachmentId, CancellationToken ct)
     {
-        // Attachments often carry account statements and IDs: same bar as seeing unmasked customer data.
-        if (!user.HasPermission(Permissions.ComplaintViewUnmasked))
-            throw new ForbiddenAccessException("Your role cannot open customer documents.");
-
-        var visible = await db.Complaints.VisibleTo(user).AnyAsync(c => c.Id == complaintId, ct);
-        var attachment = visible
-            ? await db.ComplaintAttachments.AsNoTracking().FirstOrDefaultAsync(a => a.Id == attachmentId && a.ComplaintId == complaintId, ct)
-            : null;
+        var complaint = await db.Complaints.AsNoTracking().VisibleTo(user).FirstOrDefaultAsync(c => c.Id == complaintId, ct);
+        var attachment = complaint is null
+            ? null
+            : await db.ComplaintAttachments.AsNoTracking().FirstOrDefaultAsync(a => a.Id == attachmentId && a.ComplaintId == complaintId, ct);
         if (attachment is null) throw new NotFoundException("Attachment", attachmentId);
+
+        // Attachments often carry account statements and IDs: same bar as seeing unmasked customer data.
+        if (!ComplaintAccess.Can(user, complaint!, Permissions.ComplaintViewUnmasked))
+            throw new ForbiddenAccessException("Your role cannot open customer documents.");
 
         audit.Log("DOWNLOAD_ATTACHMENT", Module, complaintId.ToString(), attachment.Id.ToString());
         await db.SaveChangesAsync(ct);

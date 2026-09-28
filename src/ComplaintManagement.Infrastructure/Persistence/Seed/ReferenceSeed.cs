@@ -63,12 +63,20 @@ internal static class ReferenceSeed
         })
         .ToArray();
 
-    /// <summary>The Bank IAM accessRole values and the application roles they grant.</summary>
+    /// <summary>
+    /// The Bank IAM accessRole values and the application roles they grant. Every employee also gets Viewer,
+    /// and IAM system administrators get Admin (see RoleMappingService.ResolveAll).
+    /// </summary>
     public static readonly ApplicationRoleMapping[] RoleMappings =
     [
-        new() { Id = StableGuid("role:Maker"), IamRole = "Maker", ApplicationRole = "MAKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
-        new() { Id = StableGuid("role:Checker"), IamRole = "Checker", ApplicationRole = "CHECKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
-        new() { Id = StableGuid("role:Admin"), IamRole = "Admin", ApplicationRole = "ADMIN", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        // Branches: only the OfficeHead works complaints (others view, or work what the OfficeHead assigns them).
+        new() { Id = StableGuid("role:OfficeHead:Branch"), IamRole = "OfficeHead", OfficeType = "Branch", ApplicationRole = "OFFICE_HEAD", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        // Regional Offices and Head Office keep Maker / Checker.
+        new() { Id = StableGuid("role:Maker"), IamRole = "Maker", OfficeType = "Regional Office", ApplicationRole = "MAKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new() { Id = StableGuid("role:Maker:HO"), IamRole = "Maker", OfficeType = "Head Office", ApplicationRole = "MAKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new() { Id = StableGuid("role:Checker"), IamRole = "Checker", OfficeType = "Regional Office", ApplicationRole = "CHECKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        new() { Id = StableGuid("role:Checker:HO"), IamRole = "Checker", OfficeType = "Head Office", ApplicationRole = "CHECKER", CreatedAt = SeededAt, UpdatedAt = SeededAt },
+        // Admin now comes from the IAM isSystemAdmin flag, not an access role.
     ];
 
     /// <summary>Admin-managed settings. The HO checking department is left unset until the Bank names it.</summary>

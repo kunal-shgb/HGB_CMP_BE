@@ -5,7 +5,10 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace ComplaintManagement.Api.Authentication;
 
-/// <summary>Adds application-role claims by mapping the IAM access role (and office type) through application_role_mapping.</summary>
+/// <summary>
+/// Adds application-role claims: the IAM access role (and office type) mapped through application_role_mapping,
+/// Viewer for every employee, and Admin for IAM system administrators.
+/// </summary>
 public sealed class RoleMappingClaimsTransformation(IRoleMappingService mappings, IMemoryCache cache) : IClaimsTransformation
 {
     private const string CacheKey = "cmp:role-mappings";
@@ -21,10 +24,11 @@ public sealed class RoleMappingClaimsTransformation(IRoleMappingService mappings
             return mappings.GetActiveMappingsAsync(CancellationToken.None);
         }) ?? [];
 
-        var roles = RoleMappingService.Resolve(
+        var roles = RoleMappingService.ResolveAll(
             active,
             identity.FindAll(CmpClaimTypes.IamRole).Select(c => c.Value),
-            identity.FindFirst(CmpClaimTypes.OfficeType)?.Value);
+            identity.FindFirst(CmpClaimTypes.OfficeType)?.Value,
+            identity.HasClaim(CmpClaimTypes.SystemAdmin, "true"));
         foreach (var role in roles) identity.AddClaim(new Claim(CmpClaimTypes.AppRole, role));
 
         return principal;

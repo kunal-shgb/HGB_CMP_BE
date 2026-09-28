@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IAttachmentService, AttachmentService>();
         services.AddScoped<IEscalationService, EscalationService>();
         services.AddScoped<CustomerNotifier>();
+        services.AddScoped<Common.Security.AssignmentPolicy>();
         services.AddScoped<ITrackingService, TrackingService>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
         services.AddScoped<Common.Security.IRoleMappingService, Common.Security.RoleMappingService>();

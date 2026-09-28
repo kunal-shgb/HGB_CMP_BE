@@ -13,4 +13,7 @@ internal sealed class IamUserService : IIamUserService
 
     public Task<IReadOnlyList<IamUser>> SearchUsersAsync(string? query, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Bank IAM directory integration is pending the IAM API specification.");
+
+    public Task<IReadOnlyList<IamUser>> GetUsersInOfficeAsync(string officeCode, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Bank IAM directory integration is pending the IAM API specification.");
 }

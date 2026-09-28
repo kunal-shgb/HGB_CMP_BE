@@ -20,6 +20,7 @@ public sealed class MockIamUser
     public required string OfficeType { get; set; }
     public string? Mobile { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsSystemAdmin { get; set; }
     public required string PasswordHash { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

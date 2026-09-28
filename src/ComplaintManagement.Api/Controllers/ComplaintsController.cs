@@ -13,6 +13,8 @@ namespace ComplaintManagement.Api.Controllers;
 [ApiController]
 [Route("api/v1/complaints")]
 [Authorize(Policy = Permissions.ComplaintView)]
+// Status, remarks, attachments and escalation are checked per complaint in the Application layer
+// (role, or the complaint being assigned to the caller). Assigning stays a role-only action.
 public sealed class ComplaintsController(IComplaintService complaints, IAttachmentService attachments) : ControllerBase
 {
     [HttpGet]
@@ -26,7 +28,6 @@ public sealed class ComplaintsController(IComplaintService complaints, IAttachme
     public Task<IReadOnlyList<TimelineEvent>> History(Guid id, CancellationToken ct) => complaints.GetHistoryAsync(id, ct);
 
     [HttpPost("{id:guid}/status")]
-    [Authorize(Policy = Permissions.ComplaintChangeStatus)]
     public Task<ChangeStatusResponse> ChangeStatus(Guid id, ChangeStatusRequest request, CancellationToken ct) =>
         complaints.ChangeStatusAsync(id, request, ct);
 
@@ -39,7 +40,6 @@ public sealed class ComplaintsController(IComplaintService complaints, IAttachme
     }
 
     [HttpPost("{id:guid}/remarks")]
-    [Authorize(Policy = Permissions.ComplaintAddRemark)]
     public Task<RemarkItem> AddRemark(Guid id, AddRemarkRequest request, CancellationToken ct) =>
         complaints.AddRemarkAsync(id, request, ct);
 
@@ -48,7 +48,6 @@ public sealed class ComplaintsController(IComplaintService complaints, IAttachme
     public Task<IReadOnlyList<NotificationItem>> Notifications(Guid id, CancellationToken ct) => complaints.GetNotificationsAsync(id, ct);
 
     [HttpPost("{id:guid}/escalate")]
-    [Authorize(Policy = Permissions.ComplaintEscalate)]
     public async Task<IActionResult> Escalate(Guid id, EscalateRequest request, CancellationToken ct)
     {
         await complaints.EscalateAsync(id, request, ct);
@@ -56,7 +55,6 @@ public sealed class ComplaintsController(IComplaintService complaints, IAttachme
     }
 
     [HttpPost("{id:guid}/attachments")]
-    [Authorize(Policy = Permissions.ComplaintAddAttachment)]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(FormFiles.MaxRequestBytes)]
     [RequestFormLimits(MultipartBodyLengthLimit = FormFiles.MaxRequestBytes)]

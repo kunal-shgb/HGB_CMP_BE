@@ -9,8 +9,10 @@ public sealed class IamUserProfile
     public string EmployeeCode { get; set; } = "";
     public string FullName { get; set; } = "";
     public string? Designation { get; set; }
-    /// <summary>"Maker" or "Checker".</summary>
+    /// <summary>e.g. "OfficeHead", "Maker", "Checker" or "NoRole".</summary>
     public string? AccessRole { get; set; }
+    /// <summary>IAM system administrator; grants the portal's Admin role.</summary>
+    public bool IsSystemAdmin { get; set; }
     public int? DepartmentId { get; set; }
     public string? DepartmentName { get; set; }
     public int? OfficeId { get; set; }
@@ -20,11 +22,13 @@ public sealed class IamUserProfile
     public string? OfficeType { get; set; }
     public string? Mobile { get; set; }
     public bool IsActive { get; set; }
+    public DateTimeOffset? LastLogin { get; set; }
+    public DateTimeOffset? CreatedAt { get; set; }
 }
 
 public static class IamProfileMapper
 {
     /// <summary>The fields the portal uses. The mobile number is deliberately dropped.</summary>
     public static IamUser ToIamUser(IamUserProfile p) =>
-        new(p.EmployeeCode, p.FullName, p.Designation, p.AccessRole, p.OfficeType, p.OfficeCode, p.OfficeName, p.DepartmentName, p.IsActive);
+        new(p.EmployeeCode, p.FullName, p.Designation, p.AccessRole, p.OfficeType, p.OfficeCode, p.OfficeName, p.DepartmentName, p.IsActive, p.IsSystemAdmin);
 }

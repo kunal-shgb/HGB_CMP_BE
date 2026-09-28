@@ -38,6 +38,7 @@ public sealed class PortalTokenIssuer(IOptions<PortalTokenOptions> options, Time
         Add(CmpClaimTypes.OfficeCode, user.OfficeCode);
         Add(CmpClaimTypes.OfficeName, user.OfficeName);
         Add(CmpClaimTypes.DepartmentName, user.DepartmentName);
+        if (user.IsSystemAdmin) claims.Add(new Claim(CmpClaimTypes.SystemAdmin, "true"));
 
         var token = new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {

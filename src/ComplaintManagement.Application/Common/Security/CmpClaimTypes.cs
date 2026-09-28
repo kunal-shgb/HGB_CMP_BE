@@ -15,4 +15,6 @@ public static class CmpClaimTypes
     public const string OfficeCode = "cmp:office_code";
     public const string OfficeName = "cmp:office_name";
     public const string DepartmentName = "cmp:department";
+    /// <summary>"true" when the IAM marks the employee as a system administrator.</summary>
+    public const string SystemAdmin = "cmp:system_admin";
 }

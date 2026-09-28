@@ -103,10 +103,15 @@ public class ManualEscalationTests
 
     public ManualEscalationTests() => _data = TestData.Seed(_db);
 
-    private ComplaintService Service(FakeUser user) => new(
-        _db, user, new FakeAudit(), new FakeIam(), _data.Org, _clock, Options.Create(new SlaOptions()),
+    private ComplaintService Service(FakeUser user)
+    {
+        var iam = new FakeIam();
+        return new(
+        _db, user, new FakeAudit(), iam, _data.Org, _clock, Options.Create(new SlaOptions()),
         new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
-        new ComplaintManagement.Application.Notifications.CustomerNotifier(_db, _clock));
+        new ComplaintManagement.Application.Notifications.CustomerNotifier(_db, _clock),
+        FakeRoleMappings.Policy(iam));
+    }
 
     private static FakeUser BranchMaker => FakeUser.AtBranch("E-B", "A1", AppRoles.Maker);
     private static FakeUser RoChecker => FakeUser.AtRegion("E-R", "RA", AppRoles.Checker);

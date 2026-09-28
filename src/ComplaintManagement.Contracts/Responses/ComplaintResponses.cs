@@ -47,7 +47,8 @@ public sealed record ComplaintDetail(
     IReadOnlyList<AllowedTransition> AllowedTransitions,
     PendingApprovalInfo? PendingApproval,
     IReadOnlyList<RemarkItem> Remarks,
-    IReadOnlyList<AttachmentItem> Attachments);
+    IReadOnlyList<AttachmentItem> Attachments,
+    ComplaintAbilities Abilities);
 
 /// <summary>Customer identifiers are masked unless the caller may see them in full.</summary>
 public sealed record CustomerInfo(
@@ -135,3 +136,13 @@ public sealed record TrackingView(
 
 /// <summary>A status change as the customer sees it, or a remark staff marked visible to the customer.</summary>
 public sealed record TrackingUpdate(DateTimeOffset At, string Title, string? Detail);
+
+/// <summary>What the signed-in user may do on this complaint (roles plus assignment). The API enforces the same rules.</summary>
+public sealed record ComplaintAbilities(
+    bool ChangeStatus,
+    bool AddRemark,
+    bool AddAttachment,
+    bool Assign,
+    bool Escalate,
+    bool ViewCustomerDetails,
+    bool IsAssignedToMe);

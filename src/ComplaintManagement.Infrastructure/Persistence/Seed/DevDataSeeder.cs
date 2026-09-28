@@ -64,7 +64,7 @@ public static class DevDataSeeder
         }
 
         var statuses = await db.Statuses.ToDictionaryAsync(s => s.Code, ct);
-        var assignees = devUsers.Where(u => u.IsActive && u.AccessRole == "Maker").ToList();
+        var assignees = devUsers.Where(u => u.IsActive && u.AccessRole is "Maker" or "OfficeHead").ToList();
         var random = new Random(20260924);
         var now = DateTimeOffset.UtcNow;
         var year = IstDate.ToIstDate(now).Year;
