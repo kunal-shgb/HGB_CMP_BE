@@ -1,3 +1,4 @@
+using ComplaintManagement.Application.Attachments;
 using ComplaintManagement.Application.Common;
 using ComplaintManagement.Application.Common.Exceptions;
 using ComplaintManagement.Application.Common.Interfaces;
@@ -26,6 +27,8 @@ public interface IComplaintService
     Task ReturnAsync(Guid approvalId, DecideApprovalRequest request, CancellationToken ct);
     Task AssignAsync(Guid id, AssignComplaintRequest request, CancellationToken ct);
     Task<RemarkItem> AddRemarkAsync(Guid id, AddRemarkRequest request, CancellationToken ct);
+    /// <summary>A remark with files attached to it. Files need the AddAttachment right as well.</summary>
+    Task<RemarkItem> AddRemarkAsync(Guid id, AddRemarkRequest request, IReadOnlyList<UploadFile> files, CancellationToken ct);
     Task EscalateAsync(Guid id, EscalateRequest request, CancellationToken ct);
     Task<IReadOnlyList<NotificationItem>> GetNotificationsAsync(Guid id, CancellationToken ct);
 }
@@ -43,7 +46,8 @@ public sealed class ComplaintService(
     IValidator<AssignComplaintRequest> assignValidator,
     IValidator<AddRemarkRequest> remarkValidator,
     CustomerNotifier notifier,
-    AssignmentPolicy assignment) : IComplaintService
+    AssignmentPolicy assignment,
+    AttachmentStore attachmentStore) : IComplaintService
 {
     private const string Module = "Complaint";
 
@@ -61,12 +65,11 @@ public sealed class ComplaintService(
             .Take(filter.PageSize)
             .Select(c => new
             {
-                c.Id, c.ComplaintNumber, c.CustomerName, c.MobileNumber, c.CreatedAt, c.SlaDueDate, c.ClosedAt, c.EscalationLevel,
+                c.Id, c.ComplaintNumber, c.Title, c.CustomerName, c.MobileNumber, c.CreatedAt, c.SlaDueDate, c.ClosedAt, c.EscalationLevel, c.Source,
                 c.AssignedEmployeeId, c.AssignedEmployeeName,
                 Branch = new OrgRef(c.BranchCode, c.BranchName),
                 Region = new OrgRef(c.RegionCode, c.RegionName),
                 Category = new OrgRef(c.Category!.Code, c.Category.Name),
-                SubCategory = new OrgRef(c.SubCategory!.Code, c.SubCategory.Name),
                 Status = new StatusRef(c.Status!.Code, c.Status.Name, c.Status.IsTerminal),
                 Priority = new OrgRef(c.Priority!.Code, c.Priority.Name),
             })
@@ -74,11 +77,12 @@ public sealed class ComplaintService(
 
         var now = clock.GetUtcNow();
         var items = rows.Select(r => new ComplaintListItem(
-            r.Id, r.ComplaintNumber, r.CustomerName, Masking.Mobile(r.MobileNumber),
-            r.Branch, r.Region, r.Category, r.SubCategory, r.Status, r.Priority,
+            r.Id, r.ComplaintNumber, r.Title, r.CustomerName, Masking.Mobile(r.MobileNumber),
+            r.Branch, r.Region, r.Category, r.Status, r.Priority,
             r.AssignedEmployeeId is null ? null : new EmployeeRef(r.AssignedEmployeeId, r.AssignedEmployeeName),
             BuildSla(r.CreatedAt, r.SlaDueDate, r.ClosedAt, now),
             r.EscalationLevel,
+            SourceRef(r.Source),
             r.CreatedAt)).ToList();
 
         audit.Log("LIST", Module, null, $"page={filter.Page}");
@@ -139,11 +143,13 @@ public sealed class ComplaintService(
                 c.PreferredChannel,
                 !unmasked),
             new TransactionInfo(c.TransactionId, c.TransactionDate, c.TransactionAmount),
+            c.Title,
             c.Description,
+            SourceRef(c.Source),
+            c.LodgedByEmployeeId is null ? null : new LodgedByInfo(c.LodgedByEmployeeId, c.LodgedByName, c.LodgedByOfficeName),
             new OrgRef(c.BranchCode, c.BranchName),
             new OrgRef(c.RegionCode, c.RegionName),
             new OrgRef(c.Category!.Code, c.Category.Name),
-            new OrgRef(c.SubCategory!.Code, c.SubCategory.Name),
             new StatusRef(c.Status!.Code, c.Status.Name, c.Status.IsTerminal),
             new OrgRef(c.Priority!.Code, c.Priority.Name),
             c.AssignedEmployeeId is null ? null : new EmployeeRef(c.AssignedEmployeeId, c.AssignedEmployeeName),
@@ -157,8 +163,9 @@ public sealed class ComplaintService(
             c.ClosedAt,
             transitions,
             pendingInfo,
-            c.Remarks.OrderByDescending(r => r.CreatedAt).Select(ToRemarkItem).ToList(),
-            c.Attachments.OrderBy(a => a.UploadedAt)
+            c.Remarks.OrderByDescending(r => r.CreatedAt)
+                .Select(r => ToRemarkItem(r, c.Attachments.Where(a => a.RemarkId == r.Id))).ToList(),
+            c.Attachments.Where(a => a.RemarkId == null).OrderBy(a => a.UploadedAt)
                 .Select(Attachments.AttachmentService.ToItem).ToList(),
             ComplaintAccess.Abilities(user, c, NextEscalationLevel(c) is not null, await assignment.CanAssignAsync(user, c, ct)));
     }
@@ -398,11 +405,19 @@ public sealed class ComplaintService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<RemarkItem> AddRemarkAsync(Guid id, AddRemarkRequest request, CancellationToken ct)
+    public Task<RemarkItem> AddRemarkAsync(Guid id, AddRemarkRequest request, CancellationToken ct) =>
+        AddRemarkAsync(id, request, [], ct);
+
+    public async Task<RemarkItem> AddRemarkAsync(Guid id, AddRemarkRequest request, IReadOnlyList<UploadFile> files, CancellationToken ct)
     {
         await remarkValidator.ValidateAndThrowAsync(request, ct);
         var c = await LoadScopedAsync(id, ct, includeChildren: false);
         ComplaintAccess.Demand(user, c, Permissions.ComplaintAddRemark);
+        if (files.Count > 0)
+        {
+            ComplaintAccess.Demand(user, c, Permissions.ComplaintAddAttachment);
+            await attachmentStore.EnsureRoomAsync(c.Id, files.Count, ct);
+        }
 
         var remark = new ComplaintRemark
         {
@@ -416,9 +431,23 @@ public sealed class ComplaintService(
         db.ComplaintRemarks.Add(remark);
         c.UpdatedAt = remark.CreatedAt;
 
-        audit.Log("ADD_REMARK", Module, c.Id.ToString(), remark.Visibility.ToString());
-        await db.SaveChangesAsync(ct);
-        return ToRemarkItem(remark);
+        var stored = files.Count == 0 ? [] : await attachmentStore.StoreAsync(c.Id, files, user.EmployeeId, user.Name, ct);
+        foreach (var a in stored)
+        {
+            a.RemarkId = remark.Id;
+            audit.Log("UPLOAD_ATTACHMENT", "Attachment", c.Id.ToString(), $"{a.Id} {a.ContentType} {a.FileSize}B remark={remark.Id}");
+        }
+        audit.Log("ADD_REMARK", Module, c.Id.ToString(), remark.Visibility.ToString() + (stored.Count == 0 ? "" : $" files={stored.Count}"));
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            await attachmentStore.DiscardAsync(stored);
+            throw;
+        }
+        return ToRemarkItem(remark, stored);
     }
 
     public async Task EscalateAsync(Guid id, EscalateRequest request, CancellationToken ct)
@@ -505,7 +534,6 @@ public sealed class ComplaintService(
     {
         IQueryable<Complaint> query = db.Complaints
             .Include(c => c.Category)
-            .Include(c => c.SubCategory)
             .Include(c => c.Status)
             .Include(c => c.Priority);
 
@@ -530,9 +558,10 @@ public sealed class ComplaintService(
         return new SlaInfo(due, state, age, overdue);
     }
 
-    private static RemarkItem ToRemarkItem(ComplaintRemark r) => new(
+    private static RemarkItem ToRemarkItem(ComplaintRemark r, IEnumerable<ComplaintAttachment> files) => new(
         r.Id, r.Remark, r.Visibility.ToString().ToUpperInvariant(),
-        new EmployeeRef(r.CreatedByEmployeeId, r.CreatedByName), r.CreatedAt);
+        new EmployeeRef(r.CreatedByEmployeeId, r.CreatedByName), r.CreatedAt,
+        files.OrderBy(a => a.UploadedAt).Select(Attachments.AttachmentService.ToItem).ToList());
 
     private static IQueryable<Complaint> ApplyFilters(IQueryable<Complaint> q, ComplaintFilterRequest f, DateTimeOffset now)
     {
@@ -551,7 +580,6 @@ public sealed class ComplaintService(
         if (Clean(f.BranchCode) is { } branch) q = q.Where(c => c.BranchCode == branch);
         if (Clean(f.RegionCode) is { } region) q = q.Where(c => c.RegionCode == region);
         if (Clean(f.CategoryCode) is { } cat) q = q.Where(c => c.Category!.Code == cat);
-        if (Clean(f.SubCategoryCode) is { } sub) q = q.Where(c => c.SubCategory!.Code == sub);
         if (Clean(f.Status) is { } status) q = q.Where(c => c.StatusCode == status);
         if (Clean(f.Priority) is { } priority) q = q.Where(c => c.PriorityCode == priority);
         if (Clean(f.AssignedEmployeeId) is { } emp) q = q.Where(c => c.AssignedEmployeeId == emp);
@@ -559,6 +587,9 @@ public sealed class ComplaintService(
         if (f.ToDate is { } to) q = q.Where(c => c.CreatedAt < IstDate.StartOfDayUtc(to.AddDays(1)));
         if (f.OverdueOnly == true) q = q.Where(c => c.ClosedAt == null && c.SlaDueDate != null && c.SlaDueDate < now);
         if (f.MinEscalationLevel is { } minLevel) q = q.Where(c => c.EscalationLevel >= minLevel);
+        if (Clean(f.Source) is { } source) q = q.Where(c => c.Source == source);
         return q;
     }
+
+    private static OrgRef SourceRef(string source) => new(source, ComplaintSources.Name(source));
 }

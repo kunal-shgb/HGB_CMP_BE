@@ -5,6 +5,19 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace ComplaintManagement.Infrastructure.Persistence.Configurations;
 
+internal sealed class CategoryGroupConfiguration : IEntityTypeConfiguration<ComplaintCategoryGroup>
+{
+    public void Configure(EntityTypeBuilder<ComplaintCategoryGroup> b)
+    {
+        b.ToTable("complaint_category_groups");
+        b.Property(x => x.Code).HasMaxLength(40);
+        b.Property(x => x.Name).HasMaxLength(100);
+        b.HasIndex(x => x.Code).IsUnique();
+        b.HasMany(x => x.Categories).WithOne(x => x.Group).HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
+        b.HasData(ReferenceSeed.CategoryGroups);
+    }
+}
+
 internal sealed class CategoryConfiguration : IEntityTypeConfiguration<ComplaintCategory>
 {
     public void Configure(EntityTypeBuilder<ComplaintCategory> b)
@@ -12,26 +25,12 @@ internal sealed class CategoryConfiguration : IEntityTypeConfiguration<Complaint
         b.ToTable("complaint_categories");
         b.Property(x => x.Code).HasMaxLength(40);
         b.Property(x => x.Name).HasMaxLength(150);
-        b.Property(x => x.GroupName).HasMaxLength(100);
         b.Property(x => x.Description).HasMaxLength(500);
         b.HasIndex(x => x.Code).IsUnique();
-        b.HasMany(x => x.SubCategories).WithOne(x => x.Category).HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
-        b.HasData(ReferenceSeed.Categories);
-    }
-}
-
-internal sealed class SubCategoryConfiguration : IEntityTypeConfiguration<ComplaintSubCategory>
-{
-    public void Configure(EntityTypeBuilder<ComplaintSubCategory> b)
-    {
-        b.ToTable("complaint_subcategories");
-        b.Property(x => x.Code).HasMaxLength(40);
-        b.Property(x => x.Name).HasMaxLength(150);
         b.Property(x => x.DefaultPriorityCode).HasMaxLength(40);
-        b.HasIndex(x => new { x.CategoryId, x.Code }).IsUnique();
         b.Property(x => x.DefaultDepartmentCode).HasMaxLength(50);
         b.HasOne<ComplaintPriority>().WithMany().HasForeignKey(x => x.DefaultPriorityCode).OnDelete(DeleteBehavior.Restrict);
-        b.HasData(ReferenceSeed.SubCategories);
+        b.HasData(ReferenceSeed.Categories);
     }
 }
 

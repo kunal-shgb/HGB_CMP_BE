@@ -10,16 +10,18 @@ using Microsoft.EntityFrameworkCore;
 namespace ComplaintManagement.Application.Admin;
 
 /// <summary>
-/// Admin configuration: categories and sub-categories, status labels, status transitions and approval
+/// Admin configuration: category groups and categories (with TAT, default priority and department), status labels, status transitions and approval
 /// routing. Changes apply to new actions; existing complaints and open approvals keep what they had.
 /// </summary>
 public interface IAdminService
 {
-    Task<IReadOnlyList<AdminCategory>> GetCategoriesAsync(CancellationToken ct);
+    Task<AdminCategoryCatalogue> GetCategoriesAsync(CancellationToken ct);
+    Task CreateGroupAsync(CreateCategoryGroupRequest request, CancellationToken ct);
+    Task UpdateGroupAsync(string code, UpdateCategoryGroupRequest request, CancellationToken ct);
+    Task DeleteGroupAsync(string code, CancellationToken ct);
     Task CreateCategoryAsync(CreateCategoryRequest request, CancellationToken ct);
     Task UpdateCategoryAsync(string code, UpdateCategoryRequest request, CancellationToken ct);
-    Task CreateSubCategoryAsync(string categoryCode, CreateSubCategoryRequest request, CancellationToken ct);
-    Task UpdateSubCategoryAsync(string categoryCode, string subCode, UpdateSubCategoryRequest request, CancellationToken ct);
+    Task DeleteCategoryAsync(string code, CancellationToken ct);
 
     Task<AdminWorkflow> GetWorkflowAsync(CancellationToken ct);
     Task UpdateStatusAsync(string code, UpdateStatusRequest request, CancellationToken ct);
@@ -36,100 +38,138 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
     [GeneratedRegex("^[A-Z0-9_]{2,40}$")]
     private static partial Regex CodePattern();
 
-    // ---------- Categories ----------
+    // ---------- Groups and categories ----------
+    // Removing something is a hard delete and is allowed only while nothing depends on it; otherwise the
+    // admin hides it (IsActive = false), so existing complaints keep their category and history.
 
-    public async Task<IReadOnlyList<AdminCategory>> GetCategoriesAsync(CancellationToken ct)
+    public async Task<AdminCategoryCatalogue> GetCategoriesAsync(CancellationToken ct)
     {
-        var categories = await db.Categories.AsNoTracking().Include(c => c.SubCategories)
-            .OrderBy(c => c.SortOrder).ThenBy(c => c.Name).ToListAsync(ct);
-        return categories.Select(c => new AdminCategory(
-            c.Code, c.Name, c.GroupName, c.SortOrder, c.IsActive, c.Description,
-            c.SubCategories.OrderBy(s => s.SortOrder).ThenBy(s => s.Name).Select(s => new AdminSubCategory(
-                s.Code, s.Name, s.TatDays, s.DefaultPriorityCode,
-                s.DefaultDepartmentCode,
-                s.SortOrder, s.IsActive)).ToList())).ToList();
+        var groups = await db.CategoryGroups.AsNoTracking()
+            .OrderBy(g => g.SortOrder).ThenBy(g => g.Name)
+            .Select(g => new AdminCategoryGroup(g.Code, g.Name, g.SortOrder, g.IsActive, g.Categories.Count))
+            .ToListAsync(ct);
+        var categories = await db.Categories.AsNoTracking().Include(c => c.Group)
+            .OrderBy(c => c.Group!.SortOrder).ThenBy(c => c.SortOrder).ThenBy(c => c.Name).ToListAsync(ct);
+        var used = await db.Complaints.AsNoTracking().GroupBy(c => c.CategoryId)
+            .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, ct);
+
+        return new AdminCategoryCatalogue(groups, categories.Select(c => new AdminCategory(
+            c.Code, c.Name, c.Group!.Code, c.Group.Name, c.TatDays, c.DefaultPriorityCode, c.DefaultDepartmentCode,
+            c.SortOrder, c.IsActive, c.Description, used.GetValueOrDefault(c.Id))).ToList());
+    }
+
+    public async Task CreateGroupAsync(CreateCategoryGroupRequest r, CancellationToken ct)
+    {
+        var code = NormaliseCode(r.Code);
+        ValidateText(r.Name, "Name", 100);
+        ValidateSort(r.SortOrder);
+        if (await db.CategoryGroups.AnyAsync(g => g.Code == code, ct))
+            throw new DomainException("admin.duplicate_code", $"A group with code {code} already exists.");
+        await EnsureUniqueGroupNameAsync(r.Name, null, ct);
+
+        var now = clock.GetUtcNow();
+        db.CategoryGroups.Add(new ComplaintCategoryGroup
+        {
+            Code = code,
+            Name = r.Name.Trim(),
+            SortOrder = r.SortOrder ?? ((await db.CategoryGroups.MaxAsync(g => (int?)g.SortOrder, ct) ?? 0) + 10),
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        audit.Log("CREATE_CATEGORY_GROUP", Module, code);
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateGroupAsync(string code, UpdateCategoryGroupRequest r, CancellationToken ct)
+    {
+        ValidateText(r.Name, "Name", 100);
+        ValidateSort(r.SortOrder);
+        var group = await db.CategoryGroups.FirstOrDefaultAsync(g => g.Code == code, ct) ?? throw new NotFoundException("Group", code);
+        await EnsureUniqueGroupNameAsync(r.Name, group.Id, ct);
+
+        group.Name = r.Name.Trim();
+        group.SortOrder = r.SortOrder;
+        group.IsActive = r.IsActive;
+        group.UpdatedAt = clock.GetUtcNow();
+        audit.Log("UPDATE_CATEGORY_GROUP", Module, code, r.IsActive ? null : "inactive");
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteGroupAsync(string code, CancellationToken ct)
+    {
+        var group = await db.CategoryGroups.FirstOrDefaultAsync(g => g.Code == code, ct) ?? throw new NotFoundException("Group", code);
+        var categories = await db.Categories.CountAsync(c => c.GroupId == group.Id, ct);
+        if (categories > 0)
+            throw new DomainException("admin.group_in_use",
+                $"\"{group.Name}\" still has {categories} {(categories == 1 ? "category" : "categories")}. Move or delete them first, or hide the group instead.");
+
+        db.CategoryGroups.Remove(group);
+        audit.Log("DELETE_CATEGORY_GROUP", Module, code);
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task CreateCategoryAsync(CreateCategoryRequest r, CancellationToken ct)
     {
         var code = NormaliseCode(r.Code);
         ValidateText(r.Name, "Name", 150);
-        ValidateText(r.Group, "Group", 100);
+        ValidateTat(r.TatDays);
         ValidateSort(r.SortOrder);
         ValidateOptional(r.Description, "Description", 500);
+        var group = await ResolveGroupAsync(r.GroupCode, ct);
         if (await db.Categories.AnyAsync(c => c.Code == code, ct))
             throw new DomainException("admin.duplicate_code", $"A category with code {code} already exists.");
 
-        var sort = r.SortOrder ?? ((await db.Categories.MaxAsync(c => (int?)c.SortOrder, ct) ?? 0) + 10);
-        var category = new ComplaintCategory
+        var now = clock.GetUtcNow();
+        db.Categories.Add(new ComplaintCategory
         {
-            Code = code, Name = r.Name.Trim(), GroupName = r.Group.Trim(), SortOrder = sort, Description = Blank(r.Description),
-        };
-        // Every category starts with a "General" sub-category so it is usable on the complaint form straight away.
-        category.SubCategories.Add(new ComplaintSubCategory { Code = "GENERAL", Name = "General", CategoryId = category.Id, SortOrder = 100 });
-        db.Categories.Add(category);
-        audit.Log("CREATE_CATEGORY", Module, code);
+            Code = code,
+            Name = r.Name.Trim(),
+            GroupId = group.Id,
+            TatDays = r.TatDays,
+            DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct),
+            DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct),
+            SortOrder = r.SortOrder ?? ((await db.Categories.MaxAsync(c => (int?)c.SortOrder, ct) ?? 0) + 10),
+            Description = Blank(r.Description),
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        audit.Log("CREATE_CATEGORY", Module, code, $"group={group.Code} tat={r.TatDays?.ToString() ?? "none"}");
         await db.SaveChangesAsync(ct);
     }
 
     public async Task UpdateCategoryAsync(string code, UpdateCategoryRequest r, CancellationToken ct)
     {
         ValidateText(r.Name, "Name", 150);
-        ValidateText(r.Group, "Group", 100);
+        ValidateTat(r.TatDays);
         ValidateSort(r.SortOrder);
         ValidateOptional(r.Description, "Description", 500);
         var category = await db.Categories.FirstOrDefaultAsync(c => c.Code == code, ct) ?? throw new NotFoundException("Category", code);
+        var group = await ResolveGroupAsync(r.GroupCode, ct);
 
         category.Name = r.Name.Trim();
-        category.GroupName = r.Group.Trim();
+        category.GroupId = group.Id;
+        category.TatDays = r.TatDays;
+        category.DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct);
+        category.DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct);
         category.SortOrder = r.SortOrder;
         category.IsActive = r.IsActive;
         category.Description = Blank(r.Description);
-        audit.Log("UPDATE_CATEGORY", Module, code, r.IsActive ? null : "inactive");
+        category.UpdatedAt = clock.GetUtcNow();
+        audit.Log("UPDATE_CATEGORY", Module, code,
+            $"group={group.Code} tat={r.TatDays?.ToString() ?? "none"} active={r.IsActive}");
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task CreateSubCategoryAsync(string categoryCode, CreateSubCategoryRequest r, CancellationToken ct)
+    public async Task DeleteCategoryAsync(string code, CancellationToken ct)
     {
-        var code = NormaliseCode(r.Code);
-        ValidateText(r.Name, "Name", 150);
-        ValidateTat(r.TatDays);
-        ValidateSort(r.SortOrder);
-        var category = await db.Categories.Include(c => c.SubCategories).FirstOrDefaultAsync(c => c.Code == categoryCode, ct)
-            ?? throw new NotFoundException("Category", categoryCode);
-        if (category.SubCategories.Any(s => s.Code == code))
-            throw new DomainException("admin.duplicate_code", $"{category.Name} already has a sub-category with code {code}.");
+        var category = await db.Categories.FirstOrDefaultAsync(c => c.Code == code, ct) ?? throw new NotFoundException("Category", code);
+        var used = await db.Complaints.CountAsync(c => c.CategoryId == category.Id, ct);
+        if (used > 0)
+            throw new DomainException("admin.category_in_use",
+                $"{used} {(used == 1 ? "complaint uses" : "complaints use")} \"{category.Name}\", so it cannot be deleted. Hide it instead.");
 
-        db.SubCategories.Add(new ComplaintSubCategory
-        {
-            Code = code,
-            Name = r.Name.Trim(),
-            CategoryId = category.Id,
-            TatDays = r.TatDays,
-            DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct),
-            DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct),
-            SortOrder = r.SortOrder ?? (category.SubCategories.Select(s => (int?)s.SortOrder).Max() ?? 0) + 10,
-        });
-        audit.Log("CREATE_SUBCATEGORY", Module, $"{categoryCode}/{code}");
-        await db.SaveChangesAsync(ct);
-    }
-
-    public async Task UpdateSubCategoryAsync(string categoryCode, string subCode, UpdateSubCategoryRequest r, CancellationToken ct)
-    {
-        ValidateText(r.Name, "Name", 150);
-        ValidateTat(r.TatDays);
-        ValidateSort(r.SortOrder);
-        var sub = await db.SubCategories.FirstOrDefaultAsync(s => s.Code == subCode && s.Category!.Code == categoryCode, ct)
-            ?? throw new NotFoundException("Sub-category", $"{categoryCode}/{subCode}");
-
-        sub.Name = r.Name.Trim();
-        sub.TatDays = r.TatDays;
-        sub.DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct);
-        sub.DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct);
-        sub.SortOrder = r.SortOrder;
-        sub.IsActive = r.IsActive;
-        sub.UpdatedAt = clock.GetUtcNow();
-        audit.Log("UPDATE_SUBCATEGORY", Module, $"{categoryCode}/{subCode}", $"tat={r.TatDays?.ToString() ?? "none"} active={r.IsActive}");
+        db.Categories.Remove(category);
+        audit.Log("DELETE_CATEGORY", Module, code);
         await db.SaveChangesAsync(ct);
     }
 
@@ -286,6 +326,20 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
     private static void ValidateSort(int? sort)
     {
         if (sort is not null && (sort < 0 || sort > 100_000)) throw new DomainException("admin.invalid_sort", "Sort order must be between 0 and 100,000.");
+    }
+
+    private async Task<ComplaintCategoryGroup> ResolveGroupAsync(string? code, CancellationToken ct)
+    {
+        var c = Blank(code) ?? throw new DomainException("admin.required", "Group is required.");
+        return await db.CategoryGroups.FirstOrDefaultAsync(g => g.Code == c, ct)
+            ?? throw new DomainException("admin.unknown_group", "Choose an existing group.");
+    }
+
+    private async Task EnsureUniqueGroupNameAsync(string name, Guid? except, CancellationToken ct)
+    {
+        var lowered = name.Trim().ToLower();
+        if (await db.CategoryGroups.AnyAsync(g => g.Name.ToLower() == lowered && g.Id != except, ct))
+            throw new DomainException("admin.duplicate_name", $"A group called \"{name.Trim()}\" already exists.");
     }
 
     private async Task<string?> ResolvePriorityAsync(string? code, CancellationToken ct)

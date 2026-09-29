@@ -119,6 +119,23 @@ internal static class ReferenceSeed
         ]),
     ];
 
+    public static readonly ComplaintCategoryGroup[] CategoryGroups = CategoryRows
+        .Select((g, i) => new ComplaintCategoryGroup
+        {
+            Id = GroupId(g.Group),
+            Code = GroupCode(g.Group),
+            Name = g.Group,
+            SortOrder = (i + 1) * 10,
+            CreatedAt = SeededAt,
+            UpdatedAt = SeededAt,
+        })
+        .ToArray();
+
+    /// <summary>"Digital Banking" → "DIGITAL_BANKING". Also used by the migration that introduced groups.</summary>
+    public static string GroupCode(string name) => System.Text.RegularExpressions.Regex.Replace(name.ToUpperInvariant(), "[^A-Z0-9]+", "_").Trim('_');
+
+    private static Guid GroupId(string name) => StableGuid($"group:{GroupCode(name)}");
+
     public static readonly ComplaintCategory[] Categories = CategoryRows
         .SelectMany(g => g.Items.Select(i => (g.Group, i.Code, i.Name)))
         .Select((c, i) => new ComplaintCategory
@@ -126,32 +143,8 @@ internal static class ReferenceSeed
             Id = StableGuid($"category:{c.Code}"),
             Code = c.Code,
             Name = c.Name,
-            GroupName = c.Group,
+            GroupId = GroupId(c.Group),
             SortOrder = (i + 1) * 10,
-            CreatedAt = SeededAt,
-            UpdatedAt = SeededAt,
-        })
-        .ToArray();
-
-    /// <summary>Every category starts with a "General" sub-category; UPI also carries the spec's example.</summary>
-    public static readonly ComplaintSubCategory[] SubCategories = Categories
-        .Select(c => new ComplaintSubCategory
-        {
-            Id = StableGuid($"subcategory:{c.Code}:GENERAL"),
-            Code = "GENERAL",
-            Name = "General",
-            CategoryId = c.Id,
-            SortOrder = 100,
-            CreatedAt = SeededAt,
-            UpdatedAt = SeededAt,
-        })
-        .Append(new ComplaintSubCategory
-        {
-            Id = StableGuid("subcategory:UPI:FAILED_TRANSACTION"),
-            Code = "FAILED_TRANSACTION",
-            Name = "Amount debited but transaction failed",
-            CategoryId = StableGuid("category:UPI"),
-            SortOrder = 10,
             CreatedAt = SeededAt,
             UpdatedAt = SeededAt,
         })

@@ -9,17 +9,18 @@ public sealed record SlaInfo(DateTimeOffset? DueDate, string State, int AgeDays,
 public sealed record ComplaintListItem(
     Guid Id,
     string ComplaintNumber,
+    string Title,
     string CustomerName,
     string MobileMasked,
     OrgRef Branch,
     OrgRef Region,
     OrgRef Category,
-    OrgRef SubCategory,
     StatusRef Status,
     OrgRef Priority,
     EmployeeRef? AssignedTo,
     SlaInfo Sla,
     int EscalationLevel,
+    OrgRef Source,
     DateTimeOffset CreatedAt);
 
 public sealed record ComplaintDetail(
@@ -27,11 +28,14 @@ public sealed record ComplaintDetail(
     string ComplaintNumber,
     CustomerInfo Customer,
     TransactionInfo Transaction,
+    string Title,
     string Description,
+    /// <summary>Where the complaint was lodged, and by whom when staff lodged it for the customer.</summary>
+    OrgRef Source,
+    LodgedByInfo? LodgedBy,
     OrgRef Branch,
     OrgRef Region,
     OrgRef Category,
-    OrgRef SubCategory,
     StatusRef Status,
     OrgRef Priority,
     EmployeeRef? AssignedTo,
@@ -47,6 +51,7 @@ public sealed record ComplaintDetail(
     IReadOnlyList<AllowedTransition> AllowedTransitions,
     PendingApprovalInfo? PendingApproval,
     IReadOnlyList<RemarkItem> Remarks,
+    /// <summary>Documents lodged with the complaint. Files added later belong to a remark.</summary>
     IReadOnlyList<AttachmentItem> Attachments,
     ComplaintAbilities Abilities);
 
@@ -96,7 +101,9 @@ public sealed record ApprovalListItem(
 
 public sealed record ChangeStatusResponse(bool PendingApproval, string Message);
 
-public sealed record RemarkItem(Guid Id, string Remark, string Visibility, EmployeeRef CreatedBy, DateTimeOffset CreatedAt);
+/// <summary>A remark and the files added with it.</summary>
+public sealed record RemarkItem(Guid Id, string Remark, string Visibility, EmployeeRef CreatedBy, DateTimeOffset CreatedAt,
+    IReadOnlyList<AttachmentItem> Attachments);
 
 /// <summary>UploadedBy.EmployeeId is "CUSTOMER" for documents lodged with the complaint. ScanStatus: CLEAN or NOT_SCANNED.</summary>
 public sealed record AttachmentItem(Guid Id, string FileName, string ContentType, long FileSize, DateTimeOffset UploadedAt, EmployeeRef UploadedBy, string ScanStatus);
@@ -125,8 +132,8 @@ public sealed record TrackingOtpResponse(string Message, int ExpiresInMinutes, s
 public sealed record TrackingView(
     string ComplaintNumber,
     string Status,
+    string Title,
     string Category,
-    string SubCategory,
     string Branch,
     DateTimeOffset RegisteredAt,
     DateTimeOffset LastUpdatedAt,
@@ -146,3 +153,9 @@ public sealed record ComplaintAbilities(
     bool Escalate,
     bool ViewCustomerDetails,
     bool IsAssignedToMe);
+
+/// <summary>The employee who lodged a complaint on the customer's behalf.</summary>
+public sealed record LodgedByInfo(string EmployeeId, string? Name, string? OfficeName);
+
+/// <summary>Result of lodging a complaint on a customer's behalf. CanOpen is false when the complaint is outside the caller's scope.</summary>
+public sealed record LodgeComplaintResponse(Guid Id, string ComplaintNumber, bool CanOpen);

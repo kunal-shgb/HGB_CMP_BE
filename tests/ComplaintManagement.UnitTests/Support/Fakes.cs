@@ -93,16 +93,15 @@ internal sealed class TestData
     public IamDepartment Dept { get; } = new("DBD", "Digital Banking Division", true);
     public FakeOrg Org { get; }
     public required ComplaintCategory Category { get; init; }
-    public required ComplaintSubCategory SubCategory { get; init; }
 
     private TestData() => Org = new FakeOrg([BranchA1, BranchA2, BranchB1], [Dept]);
 
     public static TestData Seed(TestDbContext db)
     {
-        var cat = new ComplaintCategory { Code = "UPI", Name = "UPI", GroupName = "Digital Banking" };
-        var sub = new ComplaintSubCategory { Code = "GENERAL", Name = "General", CategoryId = cat.Id, Category = cat, TatDays = 7 };
+        var group = new ComplaintCategoryGroup { Code = "DIGITAL_BANKING", Name = "Digital Banking", SortOrder = 10 };
+        var cat = new ComplaintCategory { Code = "UPI", Name = "UPI", GroupId = group.Id, Group = group, TatDays = 7 };
 
-        db.AddRange(cat, sub);
+        db.AddRange(group, cat);
         db.Statuses.AddRange(
             new ComplaintStatus { Code = "NEW", Name = "New", CustomerLabel = "Registered", IsInitial = true, SortOrder = 1 },
             new ComplaintStatus { Code = "ASSIGNED", Name = "Assigned", CustomerLabel = "Under review", IsAssignment = true, SortOrder = 2 },
@@ -121,7 +120,7 @@ internal sealed class TestData
         db.Priorities.Add(new ComplaintPriority { Code = "MEDIUM", Name = "Medium", Rank = 2, IsDefault = true });
         db.SaveChanges();
 
-        return new TestData { Category = cat, SubCategory = sub };
+        return new TestData { Category = cat };
     }
 
     public Complaint AddComplaint(TestDbContext db, IamBranch branch, string status = "NEW", IamDepartment? dept = null, string? assignedTo = null)
@@ -131,13 +130,27 @@ internal sealed class TestData
             ComplaintNumber = $"HGB-2026-{db.Complaints.Count() + 1:D8}",
             CustomerName = "Test", MobileNumber = "9876543210", AccountNumber = "123456789012",
             BranchCode = branch.Code, BranchName = branch.Name, RegionCode = branch.RegionCode, RegionName = branch.RegionName,
-            CategoryId = Category.Id, SubCategoryId = SubCategory.Id,
-            PriorityCode = "MEDIUM", StatusCode = status, Description = "Test complaint",
+            CategoryId = Category.Id,
+            PriorityCode = "MEDIUM", StatusCode = status, Title = "Test complaint", Description = "Test complaint",
             AssignedDepartmentCode = dept?.Code, AssignedDepartmentName = dept?.Name, AssignedEmployeeId = assignedTo,
             CreatedAt = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero),
         };
         db.Complaints.Add(c);
         db.SaveChanges();
         return c;
+    }
+}
+
+internal sealed class SequentialNumbers : IComplaintNumberGenerator
+{
+    private int _next;
+    public Task<string> NextAsync(int year, CancellationToken cancellationToken = default) =>
+        Task.FromResult($"HGB-{year}-{++_next:D8}");
+
+    /// <summary>A registrar for tests that lodge complaints without documents.</summary>
+    public static ComplaintManagement.Application.Complaints.ComplaintRegistrar Registrar(TestDbContext db, IIamOrganisationService org)
+    {
+        var clock = new FixedClock(DateTimeOffset.UtcNow);
+        return new(db, new SequentialNumbers(), org, clock, null!, new ComplaintManagement.Application.Notifications.CustomerNotifier(db, clock));
     }
 }

@@ -2,27 +2,27 @@ using ComplaintManagement.Domain.Common;
 
 namespace ComplaintManagement.Domain.Entities;
 
+/// <summary>A heading that categories are listed under on complaint forms, e.g. "Digital Banking".</summary>
+public class ComplaintCategoryGroup : AuditableEntity
+{
+    public required string Code { get; set; }
+    public required string Name { get; set; }
+    public int SortOrder { get; set; }
+    /// <summary>An inactive group hides all its categories from complaint forms.</summary>
+    public bool IsActive { get; set; } = true;
+    public List<ComplaintCategory> Categories { get; set; } = [];
+}
+
 public class ComplaintCategory : AuditableEntity
 {
     public required string Code { get; set; }
     public required string Name { get; set; }
     public string? Description { get; set; }
-    /// <summary>Category group for display, e.g. "Digital Banking".</summary>
-    public required string GroupName { get; set; }
-    public int SortOrder { get; set; }
-    public bool IsActive { get; set; } = true;
-    public List<ComplaintSubCategory> SubCategories { get; set; } = [];
-}
-
-public class ComplaintSubCategory : AuditableEntity
-{
-    public required string Code { get; set; }
-    public required string Name { get; set; }
-    public Guid CategoryId { get; set; }
-    public ComplaintCategory? Category { get; set; }
+    public Guid GroupId { get; set; }
+    public ComplaintCategoryGroup? Group { get; set; }
     /// <summary>Turn-around time in calendar days. Null until the Bank fixes SLA values.</summary>
     public int? TatDays { get; set; }
-    /// <summary>IAM department code that should own complaints of this type by default, if any.</summary>
+    /// <summary>IAM department code that should own complaints of this category by default, if any.</summary>
     public string? DefaultDepartmentCode { get; set; }
     public string? DefaultPriorityCode { get; set; }
     public int SortOrder { get; set; }

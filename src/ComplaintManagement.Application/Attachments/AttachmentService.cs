@@ -14,9 +14,6 @@ public sealed record AttachmentDownload(Stream Content, string FileName, string 
 
 public interface IAttachmentService
 {
-    /// <summary>Staff upload to a complaint in their scope.</summary>
-    Task<IReadOnlyList<AttachmentItem>> AddAsync(Guid complaintId, IReadOnlyList<UploadFile> files, CancellationToken ct);
-
     /// <summary>Opens an attachment for download. Needs full customer-data access; audited.</summary>
     Task<AttachmentDownload> OpenAsync(Guid complaintId, Guid attachmentId, CancellationToken ct);
 }
@@ -25,36 +22,9 @@ public sealed class AttachmentService(
     IApplicationDbContext db,
     ICurrentUser user,
     IAuditLogger audit,
-    AttachmentStore store,
-    IFileStorage storage,
-    IOptions<AttachmentOptions> options) : IAttachmentService
+    IFileStorage storage) : IAttachmentService
 {
     private const string Module = "Attachment";
-
-    public async Task<IReadOnlyList<AttachmentItem>> AddAsync(Guid complaintId, IReadOnlyList<UploadFile> files, CancellationToken ct)
-    {
-        var complaint = await db.Complaints.VisibleTo(user).FirstOrDefaultAsync(c => c.Id == complaintId, ct)
-            ?? throw new NotFoundException("Complaint", complaintId);
-        ComplaintAccess.Demand(user, complaint, Permissions.ComplaintAddAttachment);
-
-        var existing = await db.ComplaintAttachments.CountAsync(a => a.ComplaintId == complaintId, ct);
-        if (existing + files.Count > options.Value.MaxFilesPerComplaint)
-            throw new DomainException("attachment.too_many", $"A complaint can hold at most {options.Value.MaxFilesPerComplaint} attachments.");
-
-        var stored = await store.StoreAsync(complaint.Id, files, user.EmployeeId, user.Name, ct);
-        try
-        {
-            complaint.UpdatedAt = stored[0].UploadedAt;
-            foreach (var a in stored) audit.Log("UPLOAD_ATTACHMENT", Module, complaint.Id.ToString(), $"{a.Id} {a.ContentType} {a.FileSize}B");
-            await db.SaveChangesAsync(ct);
-        }
-        catch
-        {
-            await store.DiscardAsync(stored);
-            throw;
-        }
-        return stored.Select(ToItem).ToList();
-    }
 
     public async Task<AttachmentDownload> OpenAsync(Guid complaintId, Guid attachmentId, CancellationToken ct)
     {
@@ -86,6 +56,14 @@ public sealed class AttachmentService(
 /// </summary>
 public sealed class AttachmentStore(IApplicationDbContext db, IFileStorage storage, IMalwareScanner scanner, TimeProvider clock, IOptions<AttachmentOptions> options)
 {
+    /// <summary>Refuses an upload that would take the complaint past its attachment limit.</summary>
+    public async Task EnsureRoomAsync(Guid complaintId, int adding, CancellationToken ct)
+    {
+        var existing = await db.ComplaintAttachments.CountAsync(a => a.ComplaintId == complaintId, ct);
+        if (existing + adding > options.Value.MaxFilesPerComplaint)
+            throw new DomainException("attachment.too_many", $"A complaint can hold at most {options.Value.MaxFilesPerComplaint} attachments.");
+    }
+
     public async Task<IReadOnlyList<ComplaintAttachment>> StoreAsync(
         Guid complaintId, IReadOnlyList<UploadFile> files, string uploadedBy, string? uploadedByName, CancellationToken ct)
     {

@@ -33,10 +33,10 @@ public class RoleResolutionTests
         Assert.Equal(expected.Order(), RoleMappingService.ResolveAll(Seeded, [accessRole], officeType, systemAdmin).Order());
 
     [Fact]
-    public void Viewer_can_only_look()
+    public void Viewer_can_only_look_and_lodge()
     {
         var p = Permissions.ForRoles([AppRoles.Viewer]);
-        Assert.Equal([Permissions.ComplaintView, Permissions.DashboardView], p.Order());
+        Assert.Equal([Permissions.ComplaintCreate, Permissions.ComplaintView, Permissions.DashboardView], p.Order());
     }
 }
 
@@ -61,7 +61,7 @@ public class OfficeHeadDelegationTests
         _data.Org, _clock, Options.Create(new SlaOptions()),
         new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
         new CustomerNotifier(_db, _clock),
-        FakeRoleMappings.Policy(iam));
+        FakeRoleMappings.Policy(iam), null!);
     }
 
     [Fact]
@@ -137,7 +137,7 @@ public class RegionalCheckerAssignmentTests
         var iam = new FakeIam([.. directory, Staff.At("300005", "Branch", "A1"), Staff.At("300007", "Branch", "A2")]);
         return new(_db, user, new FakeAudit(), iam, _data.Org, _clock, Options.Create(new SlaOptions()),
             new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
-            new CustomerNotifier(_db, _clock), FakeRoleMappings.Policy(iam));
+            new CustomerNotifier(_db, _clock), FakeRoleMappings.Policy(iam), null!);
     }
 
     [Fact]

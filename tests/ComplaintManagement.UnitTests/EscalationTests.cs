@@ -110,7 +110,7 @@ public class ManualEscalationTests
         _db, user, new FakeAudit(), iam, _data.Org, _clock, Options.Create(new SlaOptions()),
         new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
         new ComplaintManagement.Application.Notifications.CustomerNotifier(_db, _clock),
-        FakeRoleMappings.Policy(iam));
+        FakeRoleMappings.Policy(iam), null!);
     }
 
     private static FakeUser BranchMaker => FakeUser.AtBranch("E-B", "A1", AppRoles.Maker);

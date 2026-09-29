@@ -6,12 +6,12 @@ namespace ComplaintManagement.Application.Common.Interfaces;
 public interface IApplicationDbContext
 {
     DbSet<Complaint> Complaints { get; }
+    DbSet<ComplaintCategoryGroup> CategoryGroups { get; }
     DbSet<ComplaintStatusHistory> ComplaintStatusHistory { get; }
     DbSet<ComplaintAssignment> ComplaintAssignments { get; }
     DbSet<ComplaintRemark> ComplaintRemarks { get; }
     DbSet<ComplaintAttachment> ComplaintAttachments { get; }
     DbSet<ComplaintCategory> Categories { get; }
-    DbSet<ComplaintSubCategory> SubCategories { get; }
     DbSet<ComplaintStatus> Statuses { get; }
     DbSet<ComplaintStatusTransition> StatusTransitions { get; }
     DbSet<ComplaintPriority> Priorities { get; }

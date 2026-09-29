@@ -19,6 +19,8 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, includeInternalTypes: true);
         services.AddScoped<IComplaintService, ComplaintService>();
         services.AddScoped<IPublicComplaintService, PublicComplaintService>();
+        services.AddScoped<ComplaintRegistrar>();
+        services.AddScoped<IComplaintIntakeService, ComplaintIntakeService>();
         services.AddScoped<IReferenceService, ReferenceService>();
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<IEmployeeDirectoryService, EmployeeDirectoryService>();

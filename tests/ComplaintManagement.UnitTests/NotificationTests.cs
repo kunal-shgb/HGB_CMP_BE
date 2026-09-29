@@ -25,7 +25,7 @@ public class CustomerNotificationTests
         _db, user, new FakeAudit(), iam, _data.Org, _clock, Options.Create(new SlaOptions()),
         new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
         new CustomerNotifier(_db, _clock),
-        FakeRoleMappings.Policy(iam));
+        FakeRoleMappings.Policy(iam), null!);
     }
 
     private static FakeUser Maker => FakeUser.AtBranch("E-A1", "A1", AppRoles.Maker);

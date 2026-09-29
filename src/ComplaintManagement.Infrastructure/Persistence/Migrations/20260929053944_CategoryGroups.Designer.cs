@@ -3,6 +3,7 @@ using System;
 using ComplaintManagement.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929053944_CategoryGroups")]
+    partial class CategoryGroups
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -392,11 +395,9 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("status_code");
 
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("title");
+                    b.Property<Guid>("SubCategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sub_category_id");
 
                     b.Property<decimal?>("TransactionAmount")
                         .HasPrecision(18, 2)
@@ -458,6 +459,9 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("StatusCode")
                         .HasDatabaseName("ix_complaints_status_code");
+
+                    b.HasIndex("SubCategoryId")
+                        .HasDatabaseName("ix_complaints_sub_category_id");
 
                     b.HasIndex("TransactionId")
                         .HasDatabaseName("ix_complaints_transaction_id");
@@ -666,10 +670,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("file_size");
 
-                    b.Property<Guid?>("RemarkId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("remark_id");
-
                     b.Property<string>("ScanStatus")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -709,9 +709,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.HasIndex("ComplaintId")
                         .HasDatabaseName("ix_complaint_attachments_complaint_id");
 
-                    b.HasIndex("RemarkId")
-                        .HasDatabaseName("ix_complaint_attachments_remark_id");
-
                     b.ToTable("complaint_attachments", (string)null);
                 });
 
@@ -731,16 +728,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
-
-                    b.Property<string>("DefaultDepartmentCode")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("default_department_code");
-
-                    b.Property<string>("DefaultPriorityCode")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("default_priority_code");
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)
@@ -765,10 +752,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("sort_order");
 
-                    b.Property<int?>("TatDays")
-                        .HasColumnType("integer")
-                        .HasColumnName("tat_days");
-
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -779,9 +762,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.HasIndex("Code")
                         .IsUnique()
                         .HasDatabaseName("ix_complaint_categories_code");
-
-                    b.HasIndex("DefaultPriorityCode")
-                        .HasDatabaseName("ix_complaint_categories_default_priority_code");
 
                     b.HasIndex("GroupId")
                         .HasDatabaseName("ix_complaint_categories_group_id");
@@ -1934,6 +1914,393 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintSubCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("category_id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DefaultDepartmentCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("default_department_code");
+
+                    b.Property<string>("DefaultPriorityCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("default_priority_code");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<int?>("TatDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("tat_days");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_complaint_subcategories");
+
+                    b.HasIndex("DefaultPriorityCode")
+                        .HasDatabaseName("ix_complaint_subcategories_default_priority_code");
+
+                    b.HasIndex("CategoryId", "Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_complaint_subcategories_category_id_code");
+
+                    b.ToTable("complaint_subcategories", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("57ac7ea8-e99c-e2ac-a9be-cef61770a586"),
+                            CategoryId = new Guid("bacd7ee0-f24a-9067-5f24-c1a6eede3504"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("e84973d5-c6ab-a648-ad90-6be8cde968ea"),
+                            CategoryId = new Guid("579b2ff3-380c-1c83-932f-940cc4372647"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("77b8cf95-d9cf-46b5-8577-f5bafacf7ed4"),
+                            CategoryId = new Guid("91b143ed-6db4-07ba-f5a3-bca3e527c2ee"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("c8fa8068-635a-0439-a1cc-f931ed8ad8b1"),
+                            CategoryId = new Guid("e35ca180-12fe-e94d-dd76-ae4260660231"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("3c287e16-cfc2-9697-a82a-886fef89c4ab"),
+                            CategoryId = new Guid("eb757c19-875c-cea4-08d8-d93663f9b6c6"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("26bb8a4e-af91-8734-62d1-c63f088ed4ec"),
+                            CategoryId = new Guid("e439761a-f5ce-e164-3f61-b1434cb0d301"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("9a210f35-22e2-d631-c9d1-01db70504a8c"),
+                            CategoryId = new Guid("baea03e6-ced5-049a-e711-5e3180ca7a18"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("91d5f8eb-81c3-89f8-6915-6124ba1ff349"),
+                            CategoryId = new Guid("7ae478ae-781e-e285-7bca-73f3056ed012"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("e6f6869f-cfaa-b60f-892d-9343b559d322"),
+                            CategoryId = new Guid("82bf17a6-6733-3043-3dc9-4609aa874e2b"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("82bc93ae-f37a-e002-dc80-95c98294427c"),
+                            CategoryId = new Guid("d8f7d524-3b9a-f1e5-d130-8e724b975c93"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("44a6e8de-27ee-8fa2-0bf3-640b2d6307d9"),
+                            CategoryId = new Guid("38da2491-c7fd-aca2-e2a8-4e6e5e7f9e5c"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("3b533cf8-5c56-aeb8-3c55-6124c95d5b48"),
+                            CategoryId = new Guid("70bd8b31-f581-1695-44bc-b5eec6d1976c"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("4c0e458b-3fc7-0cce-bc45-f17825cdf561"),
+                            CategoryId = new Guid("3efaa423-940d-4d23-97ad-9ef8a442d510"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("c37d81ab-2793-26e1-0615-b0496d968ed6"),
+                            CategoryId = new Guid("32d7c462-c893-f872-cf7f-f6bab64aa2f9"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("99f92943-7649-68f3-1146-68f9fa56d0ff"),
+                            CategoryId = new Guid("3bfbe5a0-e29d-6bf1-df80-450d8b646beb"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("ac858dfd-0b01-01ea-28f8-efbbdc5c8436"),
+                            CategoryId = new Guid("b0bf79cc-8a5e-cb7c-af45-f3bd917b64ce"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("fc381832-9366-72db-8055-acc91ff7b91d"),
+                            CategoryId = new Guid("755e2770-a991-d327-0862-d5c89edda5cd"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("6ebcf5a6-41a3-3218-1d65-b0e706ed1510"),
+                            CategoryId = new Guid("eddf26a9-1a2d-e289-1c97-3d20b132eefa"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("aabccea1-5710-18d7-c327-3ee28523b29f"),
+                            CategoryId = new Guid("f8e8b14c-7422-83dd-495f-7d79993ae994"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("90be7a8b-070d-930b-94c1-6345eeb947ef"),
+                            CategoryId = new Guid("43acc243-5aa7-f088-6f8d-75dadae76b98"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("51271bb0-f73f-5969-184d-6ba0a4d25270"),
+                            CategoryId = new Guid("e423bc53-18d0-6618-7e77-4fe963faca7a"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("0680b4dc-6444-2f8c-37f6-09769f28e786"),
+                            CategoryId = new Guid("c150b910-80bd-a266-e3d1-5732de65eca3"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("be6477e5-d7b7-0932-e837-04070bfd90eb"),
+                            CategoryId = new Guid("95bb5fce-d1cc-2786-4615-0282d08ed397"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("bb79fa0c-a117-9c27-f2c3-7d2d9a09480d"),
+                            CategoryId = new Guid("c2ac6374-d722-7ad8-a163-4e3dabad955e"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("a1ca799b-be47-81ab-6563-19109dc03e54"),
+                            CategoryId = new Guid("68c852b8-bdef-081d-a039-2b39ea130edf"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("a7c33eb8-d87b-ffa3-6cfd-4dc2ce6ad114"),
+                            CategoryId = new Guid("c6b3f194-4667-7bf1-cd0b-92126088ebdd"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("a5190acb-f407-74e6-f622-2642cafc42d8"),
+                            CategoryId = new Guid("7142e2d1-682c-53bf-0ed2-b2a2f74654ca"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("fe7dc32d-97f2-c7d4-d8de-9a67d45d59b8"),
+                            CategoryId = new Guid("6b22272c-1e9a-eba8-dc4a-51668deeb904"),
+                            Code = "GENERAL",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "General",
+                            SortOrder = 100,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        },
+                        new
+                        {
+                            Id = new Guid("d790c96d-cb30-e949-f63e-6893b9d13051"),
+                            CategoryId = new Guid("bacd7ee0-f24a-9067-5f24-c1a6eede3504"),
+                            Code = "FAILED_TRANSACTION",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            IsActive = true,
+                            Name = "Amount debited but transaction failed",
+                            SortOrder = 10,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 9, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0))
+                        });
+                });
+
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2105,11 +2472,20 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_complaints_complaint_statuses_status_code");
 
+                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintSubCategory", "SubCategory")
+                        .WithMany()
+                        .HasForeignKey("SubCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_complaints_complaint_subcategories_sub_category_id");
+
                     b.Navigation("Category");
 
                     b.Navigation("Priority");
 
                     b.Navigation("Status");
+
+                    b.Navigation("SubCategory");
                 });
 
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintApproval", b =>
@@ -2156,22 +2532,10 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_complaint_attachments_complaints_complaint_id");
-
-                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintRemark", null)
-                        .WithMany("Attachments")
-                        .HasForeignKey("RemarkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_complaint_attachments_complaint_remarks_remark_id");
                 });
 
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintCategory", b =>
                 {
-                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintPriority", null)
-                        .WithMany()
-                        .HasForeignKey("DefaultPriorityCode")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_complaint_categories_complaint_priorities_default_priority_~");
-
                     b.HasOne("ComplaintManagement.Domain.Entities.ComplaintCategoryGroup", "Group")
                         .WithMany("Categories")
                         .HasForeignKey("GroupId")
@@ -2229,6 +2593,24 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_complaint_status_transitions_complaint_statuses_to_status_c~");
                 });
 
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintSubCategory", b =>
+                {
+                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintCategory", "Category")
+                        .WithMany("SubCategories")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_complaint_subcategories_complaint_categories_category_id");
+
+                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintPriority", null)
+                        .WithMany()
+                        .HasForeignKey("DefaultPriorityCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_complaint_subcategories_complaint_priorities_default_priori~");
+
+                    b.Navigation("Category");
+                });
+
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.Notification", b =>
                 {
                     b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
@@ -2261,14 +2643,14 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.Navigation("StatusHistory");
                 });
 
+            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintCategory", b =>
+                {
+                    b.Navigation("SubCategories");
+                });
+
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintCategoryGroup", b =>
                 {
                     b.Navigation("Categories");
-                });
-
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintRemark", b =>
-                {
-                    b.Navigation("Attachments");
                 });
 #pragma warning restore 612, 618
         }

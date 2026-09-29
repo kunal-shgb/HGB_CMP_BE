@@ -105,7 +105,7 @@ public sealed class TrackingService(IApplicationDbContext db, TimeProvider clock
     private async Task<TrackingView> BuildViewAsync(Guid id, CancellationToken ct)
     {
         var c = await db.Complaints.AsNoTracking()
-            .Include(x => x.Category).Include(x => x.SubCategory).Include(x => x.Status)
+            .Include(x => x.Category).Include(x => x.Status)
             .Include(x => x.StatusHistory).Include(x => x.Remarks)
             .SingleAsync(x => x.Id == id, ct);
         var labels = await db.Statuses.AsNoTracking().ToDictionaryAsync(s => s.Code, s => s.CustomerLabel, ct);
@@ -124,7 +124,7 @@ public sealed class TrackingService(IApplicationDbContext db, TimeProvider clock
             .Select(r => new TrackingUpdate(r.CreatedAt, "Update from the Bank", r.Remark)));
 
         return new TrackingView(
-            c.ComplaintNumber, c.Status!.CustomerLabel, c.Category!.Name, c.SubCategory!.Name, c.BranchName,
+            c.ComplaintNumber, c.Status!.CustomerLabel, c.Title, c.Category!.Name, c.BranchName,
             c.CreatedAt, c.UpdatedAt, c.ResolvedAt, c.ClosedAt,
             updates.OrderByDescending(u => u.At).ToList());
     }

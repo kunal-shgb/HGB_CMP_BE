@@ -18,11 +18,8 @@ public sealed class ReferenceService(IApplicationDbContext db, IIamOrganisationS
 {
     public async Task<IReadOnlyList<CategoryResponse>> CategoriesAsync(CancellationToken ct) =>
         await db.Categories.AsNoTracking()
-            .Where(c => c.IsActive)
-            .OrderBy(c => c.SortOrder)
-            .Select(c => new CategoryResponse(c.Code, c.Name, c.GroupName,
-                c.SubCategories.Where(s => s.IsActive).OrderBy(s => s.SortOrder)
-                    .Select(s => new SubCategoryResponse(s.Code, s.Name, s.TatDays)).ToList()))
+            .UsableOnForms()
+            .Select(c => new CategoryResponse(c.Code, c.Name, c.Group!.Name, c.TatDays))
             .ToListAsync(ct);
 
     public async Task<IReadOnlyList<StatusResponse>> StatusesAsync(CancellationToken ct) =>

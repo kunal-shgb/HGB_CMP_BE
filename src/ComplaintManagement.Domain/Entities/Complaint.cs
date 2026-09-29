@@ -14,6 +14,12 @@ public class Complaint : AuditableEntity
     public string? AccountNumber { get; set; }
     public string? PreferredChannel { get; set; }
 
+    // Intake. See ComplaintSources. Staff-lodged complaints record who lodged them and from which office.
+    public string Source { get; set; } = ComplaintSources.Website;
+    public string? LodgedByEmployeeId { get; set; }
+    public string? LodgedByName { get; set; }
+    public string? LodgedByOfficeName { get; set; }
+
     // Office the complaint belongs to, as held by the Bank IAM when it was registered.
     // Organisation master data lives in the IAM; the portal keeps this snapshot for scoping and reporting.
     public required string BranchCode { get; set; }
@@ -24,14 +30,14 @@ public class Complaint : AuditableEntity
     // Classification
     public Guid CategoryId { get; set; }
     public ComplaintCategory? Category { get; set; }
-    public Guid SubCategoryId { get; set; }
-    public ComplaintSubCategory? SubCategory { get; set; }
     public required string PriorityCode { get; set; }
     public ComplaintPriority? Priority { get; set; }
     public required string StatusCode { get; set; }
     public ComplaintStatus? Status { get; set; }
 
     // Complaint
+    /// <summary>Short summary given by the customer or the staff member lodging it.</summary>
+    public required string Title { get; set; }
     public required string Description { get; set; }
     public string? TransactionId { get; set; }
     public DateOnly? TransactionDate { get; set; }
@@ -85,6 +91,8 @@ public class ComplaintAssignment : Entity
 public class ComplaintRemark : Entity
 {
     public Guid ComplaintId { get; set; }
+    /// <summary>Files added together with this remark.</summary>
+    public List<ComplaintAttachment> Attachments { get; set; } = [];
     public required string Remark { get; set; }
     public Enums.RemarkVisibility Visibility { get; set; }
     public required string CreatedByEmployeeId { get; set; }
@@ -95,6 +103,8 @@ public class ComplaintRemark : Entity
 public class ComplaintAttachment : Entity
 {
     public Guid ComplaintId { get; set; }
+    /// <summary>The remark the file was added with; null for documents lodged with the complaint.</summary>
+    public Guid? RemarkId { get; set; }
     public required string FileName { get; set; }
     /// <summary>Storage key relative to the configured storage root. Never a web path.</summary>
     public required string StorageKey { get; set; }

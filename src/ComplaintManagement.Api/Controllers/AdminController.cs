@@ -14,7 +14,28 @@ namespace ComplaintManagement.Api.Controllers;
 public sealed class AdminController(IAdminService admin) : ControllerBase
 {
     [HttpGet("categories")]
-    public Task<IReadOnlyList<AdminCategory>> Categories(CancellationToken ct) => admin.GetCategoriesAsync(ct);
+    public Task<AdminCategoryCatalogue> Categories(CancellationToken ct) => admin.GetCategoriesAsync(ct);
+
+    [HttpPost("category-groups")]
+    public async Task<IActionResult> CreateGroup(CreateCategoryGroupRequest request, CancellationToken ct)
+    {
+        await admin.CreateGroupAsync(request, ct);
+        return NoContent();
+    }
+
+    [HttpPut("category-groups/{code}")]
+    public async Task<IActionResult> UpdateGroup(string code, UpdateCategoryGroupRequest request, CancellationToken ct)
+    {
+        await admin.UpdateGroupAsync(code, request, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("category-groups/{code}")]
+    public async Task<IActionResult> DeleteGroup(string code, CancellationToken ct)
+    {
+        await admin.DeleteGroupAsync(code, ct);
+        return NoContent();
+    }
 
     [HttpPost("categories")]
     public async Task<IActionResult> CreateCategory(CreateCategoryRequest request, CancellationToken ct)
@@ -30,17 +51,10 @@ public sealed class AdminController(IAdminService admin) : ControllerBase
         return NoContent();
     }
 
-    [HttpPost("categories/{code}/subcategories")]
-    public async Task<IActionResult> CreateSubCategory(string code, CreateSubCategoryRequest request, CancellationToken ct)
+    [HttpDelete("categories/{code}")]
+    public async Task<IActionResult> DeleteCategory(string code, CancellationToken ct)
     {
-        await admin.CreateSubCategoryAsync(code, request, ct);
-        return NoContent();
-    }
-
-    [HttpPut("categories/{code}/subcategories/{subCode}")]
-    public async Task<IActionResult> UpdateSubCategory(string code, string subCode, UpdateSubCategoryRequest request, CancellationToken ct)
-    {
-        await admin.UpdateSubCategoryAsync(code, subCode, request, ct);
+        await admin.DeleteCategoryAsync(code, ct);
         return NoContent();
     }
 

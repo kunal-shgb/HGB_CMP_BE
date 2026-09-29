@@ -4,6 +4,8 @@ namespace ComplaintManagement.Application.Common.Security;
 public static class Permissions
 {
     public const string ComplaintView = "Complaint.View";
+    /// <summary>Lodge a complaint on a customer's behalf. Every employee may.</summary>
+    public const string ComplaintCreate = "Complaint.Create";
     public const string ComplaintViewUnmasked = "Complaint.ViewUnmasked";
     public const string ComplaintAssign = "Complaint.Assign";
     public const string ComplaintChangeStatus = "Complaint.ChangeStatus";
@@ -18,7 +20,7 @@ public static class Permissions
 
     public static readonly IReadOnlyList<string> All =
     [
-        ComplaintView, ComplaintViewUnmasked, ComplaintAssign, ComplaintChangeStatus,
+        ComplaintView, ComplaintCreate, ComplaintViewUnmasked, ComplaintAssign, ComplaintChangeStatus,
         ComplaintAddRemark, ComplaintAddAttachment, ComplaintApprove, ComplaintEscalate, DashboardView, ReportView, AdminManage,
     ];
 
@@ -27,7 +29,7 @@ public static class Permissions
         [AppRoles.Maker] = [ComplaintView, ComplaintViewUnmasked, ComplaintAssign, ComplaintChangeStatus, ComplaintAddRemark, ComplaintAddAttachment, ComplaintEscalate, DashboardView, ReportView],
         [AppRoles.Checker] = [ComplaintView, ComplaintViewUnmasked, ComplaintApprove, ComplaintAssign, ComplaintAddRemark, ComplaintAddAttachment, ComplaintEscalate, DashboardView, ReportView],
         [AppRoles.OfficeHead] = [ComplaintView, ComplaintViewUnmasked, ComplaintAssign, ComplaintChangeStatus, ComplaintAddRemark, ComplaintAddAttachment, ComplaintEscalate, DashboardView, ReportView],
-        [AppRoles.Viewer] = [ComplaintView, DashboardView],
+        [AppRoles.Viewer] = [ComplaintView, ComplaintCreate, DashboardView],
         [AppRoles.Admin] = [AdminManage, ComplaintView, DashboardView, ReportView],
     };
 

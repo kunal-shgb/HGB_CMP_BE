@@ -31,7 +31,7 @@ public class ComplaintWorkflowTests
         _db, user, _audit, iam, _data.Org, _clock, Options.Create(new SlaOptions()),
         new ComplaintFilterValidator(), new ChangeStatusValidator(), new AssignComplaintValidator(), new AddRemarkValidator(),
         new ComplaintManagement.Application.Notifications.CustomerNotifier(_db, _clock),
-        FakeRoleMappings.Policy(iam));
+        FakeRoleMappings.Policy(iam), null!);
     }
 
     private static FakeUser HoAdmin => new("E1001", AppRoles.Maker);

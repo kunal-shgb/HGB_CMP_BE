@@ -3,6 +3,7 @@ using System;
 using ComplaintManagement.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929061716_ComplaintTitle")]
+    partial class ComplaintTitle
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -666,10 +669,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("file_size");
 
-                    b.Property<Guid?>("RemarkId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("remark_id");
-
                     b.Property<string>("ScanStatus")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -708,9 +707,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ComplaintId")
                         .HasDatabaseName("ix_complaint_attachments_complaint_id");
-
-                    b.HasIndex("RemarkId")
-                        .HasDatabaseName("ix_complaint_attachments_remark_id");
 
                     b.ToTable("complaint_attachments", (string)null);
                 });
@@ -2156,12 +2152,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_complaint_attachments_complaints_complaint_id");
-
-                    b.HasOne("ComplaintManagement.Domain.Entities.ComplaintRemark", null)
-                        .WithMany("Attachments")
-                        .HasForeignKey("RemarkId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_complaint_attachments_complaint_remarks_remark_id");
                 });
 
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintCategory", b =>
@@ -2264,11 +2254,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintCategoryGroup", b =>
                 {
                     b.Navigation("Categories");
-                });
-
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintRemark", b =>
-                {
-                    b.Navigation("Attachments");
                 });
 #pragma warning restore 612, 618
         }

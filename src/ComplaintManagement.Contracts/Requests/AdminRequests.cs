@@ -1,10 +1,13 @@
 namespace ComplaintManagement.Contracts.Requests;
 
-public sealed record CreateCategoryRequest(string Code, string Name, string Group, int? SortOrder, string? Description);
-public sealed record UpdateCategoryRequest(string Name, string Group, int SortOrder, bool IsActive, string? Description);
+public sealed record CreateCategoryGroupRequest(string Code, string Name, int? SortOrder);
+public sealed record UpdateCategoryGroupRequest(string Name, int SortOrder, bool IsActive);
 
-public sealed record CreateSubCategoryRequest(string Code, string Name, int? TatDays, string? DefaultPriorityCode, string? DefaultDepartmentCode, int? SortOrder);
-public sealed record UpdateSubCategoryRequest(string Name, int? TatDays, string? DefaultPriorityCode, string? DefaultDepartmentCode, int SortOrder, bool IsActive);
+public sealed record CreateCategoryRequest(string Code, string Name, string GroupCode, int? TatDays, string? DefaultPriorityCode,
+    string? DefaultDepartmentCode, int? SortOrder, string? Description);
+public sealed record UpdateCategoryRequest(string Name, string GroupCode, int? TatDays, string? DefaultPriorityCode,
+    string? DefaultDepartmentCode, int SortOrder, bool IsActive, string? Description);
+
 
 public sealed record UpdateStatusRequest(string Name, string CustomerLabel);
 public sealed record CreateTransitionRequest(string FromStatusCode, string ToStatusCode, bool RequiresRemark, bool RequiresApproval);

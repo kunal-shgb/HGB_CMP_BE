@@ -18,6 +18,7 @@ internal sealed class ComplaintConfiguration : IEntityTypeConfiguration<Complain
         b.Property(x => x.CustomerId).HasMaxLength(32);
         b.Property(x => x.AccountNumber).HasMaxLength(34);
         b.Property(x => x.PreferredChannel).HasMaxLength(16);
+        b.Property(x => x.Title).HasMaxLength(150);
         b.Property(x => x.Description).HasMaxLength(4000);
         b.Property(x => x.TransactionId).HasMaxLength(64);
         b.Property(x => x.TransactionAmount).HasPrecision(18, 2);
@@ -31,9 +32,12 @@ internal sealed class ComplaintConfiguration : IEntityTypeConfiguration<Complain
         b.Property(x => x.RegionName).HasMaxLength(150);
         b.Property(x => x.AssignedDepartmentCode).HasMaxLength(50);
         b.Property(x => x.AssignedDepartmentName).HasMaxLength(150);
+        b.Property(x => x.Source).HasMaxLength(32).HasDefaultValue(ComplaintSources.Website);
+        b.Property(x => x.LodgedByEmployeeId).HasMaxLength(32);
+        b.Property(x => x.LodgedByName).HasMaxLength(150);
+        b.Property(x => x.LodgedByOfficeName).HasMaxLength(150);
 
         b.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
-        b.HasOne(x => x.SubCategory).WithMany().HasForeignKey(x => x.SubCategoryId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusCode).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Priority).WithMany().HasForeignKey(x => x.PriorityCode).OnDelete(DeleteBehavior.Restrict);
 
@@ -45,6 +49,7 @@ internal sealed class ComplaintConfiguration : IEntityTypeConfiguration<Complain
 
         b.HasIndex(x => x.CreatedAt);
         b.HasIndex(x => x.StatusCode);
+        b.HasIndex(x => x.Source);
         b.HasIndex(x => x.MobileNumber);
         b.HasIndex(x => x.AccountNumber);
         b.HasIndex(x => x.TransactionId);
@@ -112,6 +117,7 @@ internal sealed class ComplaintAttachmentConfiguration : IEntityTypeConfiguratio
         b.Property(x => x.Sha256).HasMaxLength(64);
         b.Property(x => x.ScanStatus).HasMaxLength(16);
         b.HasIndex(x => x.ComplaintId);
+        b.HasOne<ComplaintRemark>().WithMany(r => r.Attachments).HasForeignKey(x => x.RemarkId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Net;
 using System.Net.Http.Json;
 using ComplaintManagement.Contracts;
@@ -89,7 +90,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     {
         var head = await factory.ClientForAsync("300001");
         var clerk = await factory.ClientForAsync("300005");
-        var id = (await head.GetFromJsonAsync<PagedResponse<ComplaintListItem>>("/api/v1/complaints?status=UNDER_PROCESS&branchCode=BR-ROH-001&pageSize=1"))!.Items[0].Id;
+        var id = await RegisterAsync("BR-ROH-001");
 
         // View only: masked, and every action refused.
         var seen = await clerk.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{id}");
@@ -113,8 +114,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     public async Task RO_checker_assigns_only_at_branches_without_an_office_head()
     {
         var checker = await factory.ClientForAsync("200001");
-        async Task<Guid> OpenAt(string branch) =>
-            (await checker.GetFromJsonAsync<PagedResponse<ComplaintListItem>>($"/api/v1/complaints?branchCode={branch}&status=RECEIVED&pageSize=1"))!.Items[0].Id;
+        Task<Guid> OpenAt(string branch) => RegisterAsync(branch);
 
         // Rohtak Main has an OfficeHead (300001).
         var withHead = await OpenAt("BR-ROH-001");
@@ -125,6 +125,37 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var noHead = await OpenAt("BR-ROH-003");
         Assert.True((await checker.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{noHead}"))!.Abilities.Assign);
         Assert.Equal(HttpStatusCode.NoContent, (await checker.PostAsJsonAsync($"/api/v1/complaints/{noHead}/assign", new AssignComplaintRequest("200003", null, "Branch has no head"))).StatusCode);
+    }
+
+    [Fact]
+    public async Task Any_employee_can_lodge_a_complaint_for_a_customer()
+    {
+        // 300011 is view-only staff at Jhajjar Main: the branch comes from their profile.
+        var clerk = await factory.ClientForAsync("300011");
+        var options = (await clerk.GetFromJsonAsync<LodgeFormOptions>("/api/v1/complaints/lodge-options"))!;
+        Assert.Equal("BR-JHJ-001", options.FixedBranch?.Code);
+        var category = options.Categories[0];
+        StaffCreateComplaintRequest Request(string? branch) => new()
+        {
+            CustomerName = "Walk-in Customer", Mobile = "9812345678", BranchCode = branch,
+            CategoryCode = category.Code,
+            Title = "Passbook not updated",
+            Description = "Customer visited the branch: passbook not updated for three months.",
+        };
+
+        var lodged = await clerk.PostAsJsonAsync("/api/v1/complaints", Request(null));
+        Assert.Equal(HttpStatusCode.Created, lodged.StatusCode);
+        var result = (await lodged.Content.ReadFromJsonAsync<LodgeComplaintResponse>())!;
+        Assert.True(result.CanOpen);
+        var detail = (await clerk.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{result.Id}"))!;
+        Assert.Equal(("BR-JHJ-001", "BRANCH", "300011"), (detail.Branch.Code, detail.Source.Code, detail.LodgedBy?.EmployeeId));
+
+        // Regional Office staff must choose the branch.
+        var ro = await factory.ClientForAsync("200003");
+        Assert.Equal(HttpStatusCode.BadRequest, (await ro.PostAsJsonAsync("/api/v1/complaints", Request(null))).StatusCode);
+        var roLodged = (await (await ro.PostAsJsonAsync("/api/v1/complaints", Request("BR-ROH-003"))).Content.ReadFromJsonAsync<LodgeComplaintResponse>())!;
+        var list = (await ro.GetFromJsonAsync<PagedResponse<ComplaintListItem>>("/api/v1/complaints?source=REGIONAL_OFFICE"))!;
+        Assert.Contains(list.Items, i => i.Id == roLodged.Id && i.Source.Code == "REGIONAL_OFFICE");
     }
 
     [Fact]
@@ -208,9 +239,11 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
     {
         var response = await factory.CreateClient().PostAsJsonAsync("/api/v1/public/complaints", new PublicCreateComplaintRequest
         {
-            CustomerName = "", Mobile = "12345", BranchCode = "BR-ROH-001", CategoryCode = "UPI", SubCategoryCode = "GENERAL", Description = "short",
+            CustomerName = "", Mobile = "12345", BranchCode = "BR-ROH-001", CategoryCode = "UPI", Title = "", Description = "short",
         });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.True(problem.GetProperty("errors").TryGetProperty("title", out _));
     }
 
     [Fact]
@@ -287,15 +320,35 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
             Documents(NewComplaint("BR-ROH-001"), ("invoice.pdf", ExeBytes)));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
 
-        var maker = await factory.ClientForAsync("300001");
-        var id = (await maker.GetFromJsonAsync<PagedResponse<ComplaintListItem>>("/api/v1/complaints?pageSize=1"))!.Items[0].Id;
-        var bad = await maker.PostAsync($"/api/v1/complaints/{id}/attachments", Documents(null, ("photo.png", ExeBytes)));
+        // Staff add files with a remark; the same checks apply.
+        var head = await factory.ClientForAsync("300001");
+        var id = await RegisterAsync("BR-ROH-001");
+        var bad = await head.PostAsync($"/api/v1/complaints/{id}/remarks", RemarkWithFiles("Photo of the slip", ("photo.png", ExeBytes)));
         Assert.Equal(HttpStatusCode.UnprocessableEntity, bad.StatusCode);
 
-        var good = await maker.PostAsync($"/api/v1/complaints/{id}/attachments", Documents(null, ("note.pdf", PdfBytes)));
+        var good = await head.PostAsync($"/api/v1/complaints/{id}/remarks", RemarkWithFiles("Reversal confirmation attached", ("note.pdf", PdfBytes)));
         Assert.Equal(HttpStatusCode.OK, good.StatusCode);
-        var items = await good.Content.ReadFromJsonAsync<List<AttachmentItem>>();
-        Assert.Equal("300001", Assert.Single(items!).UploadedBy.EmployeeId);
+        var remark = (await good.Content.ReadFromJsonAsync<RemarkItem>())!;
+        Assert.Equal("300001", Assert.Single(remark.Attachments).UploadedBy.EmployeeId);
+
+        // The file sits with its remark, not with the documents lodged with the complaint.
+        var detail = (await head.GetFromJsonAsync<ComplaintDetail>($"/api/v1/complaints/{id}"))!;
+        Assert.Empty(detail.Attachments);
+        Assert.Equal("note.pdf", Assert.Single(detail.Remarks.Single(r => r.Id == remark.Id).Attachments).FileName);
+        var download = await head.GetAsync($"/api/v1/complaints/{id}/attachments/{remark.Attachments[0].Id}");
+        Assert.Equal(PdfBytes, await download.Content.ReadAsByteArrayAsync());
+
+        // View-only staff may not attach files, even when they could add the remark text.
+        var clerk = await factory.ClientForAsync("300005");
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await clerk.PostAsync($"/api/v1/complaints/{id}/remarks", RemarkWithFiles("x", ("note.pdf", PdfBytes)))).StatusCode);
+    }
+
+    private static MultipartFormDataContent RemarkWithFiles(string text, params (string Name, byte[] Bytes)[] files)
+    {
+        var form = new MultipartFormDataContent { { new StringContent(JsonSerializer.Serialize(new AddRemarkRequest(text, "INTERNAL"), JsonSerializerOptions.Web)), "remark" } };
+        foreach (var (name, bytes) in files) form.Add(new ByteArrayContent(bytes), "files", name);
+        return form;
     }
 
     private static PublicCreateComplaintRequest NewComplaint(string branch) => new()
@@ -304,7 +357,7 @@ public class ApiTests(ApiFactory factory) : IClassFixture<ApiFactory>
         Mobile = "9876543210",
         BranchCode = branch,
         CategoryCode = "UPI",
-        SubCategoryCode = "FAILED_TRANSACTION",
+        Title = "UPI payment failed",
         Description = "Amount debited but transaction failed.",
     };
 
