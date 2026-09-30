@@ -70,6 +70,10 @@ public static class DependencyInjection
         services.AddHostedService<EscalationJob>();
 
         services.AddOptions<TrackingOptions>().Bind(configuration.GetSection(TrackingOptions.SectionName));
+        services.AddOptions<Application.Feedback.FeedbackOptions>()
+            .Bind(configuration.GetSection(Application.Feedback.FeedbackOptions.SectionName))
+            .Validate(o => string.IsNullOrWhiteSpace(o.LinkBaseUrl) || Uri.TryCreate(o.LinkBaseUrl, UriKind.Absolute, out _), "Feedback:LinkBaseUrl must be an absolute URL.")
+            .ValidateOnStart();
         if (configuration.GetValue<bool>("Tracking:ExposeOtpForTesting") && environment.IsProduction())
             throw new InvalidOperationException("Tracking:ExposeOtpForTesting is on in Production. Refusing to start.");
 

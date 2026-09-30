@@ -11,7 +11,14 @@ public sealed record DashboardSummary(
     IReadOnlyList<DailyCount> DailyTrend,
     IReadOnlyList<NamedCount> ByCategory,
     IReadOnlyList<NamedCount> ByRegion,
-    IReadOnlyList<NamedCount> PendingAgeing);
+    IReadOnlyList<NamedCount> PendingAgeing,
+    FeedbackSummary Feedback);
+
+/// <summary>
+/// Customer feedback received in the period (AverageRating null when none), and "not resolved" feedback still
+/// awaiting staff review, whenever given.
+/// </summary>
+public sealed record FeedbackSummary(int Received, double? AverageRating, int NotResolved, int NeedsReview);
 
 public sealed record StatusCount(string Code, string Name, bool IsTerminal, int Count);
 public sealed record DailyCount(DateOnly Date, int Received, int Disposed);

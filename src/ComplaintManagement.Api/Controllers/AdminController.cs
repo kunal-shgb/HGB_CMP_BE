@@ -30,6 +30,22 @@ public sealed class AdminController(IAdminService admin) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Order of the groups: every group code, first to last.</summary>
+    [HttpPut("group-order")]
+    public async Task<IActionResult> ReorderGroups(ReorderRequest request, CancellationToken ct)
+    {
+        await admin.ReorderGroupsAsync(request, ct);
+        return NoContent();
+    }
+
+    /// <summary>Order of one group's categories: every category code in the group, first to last.</summary>
+    [HttpPut("category-groups/{code}/category-order")]
+    public async Task<IActionResult> ReorderCategories(string code, ReorderRequest request, CancellationToken ct)
+    {
+        await admin.ReorderCategoriesAsync(code, request, ct);
+        return NoContent();
+    }
+
     [HttpDelete("category-groups/{code}")]
     public async Task<IActionResult> DeleteGroup(string code, CancellationToken ct)
     {
@@ -86,6 +102,13 @@ public sealed class AdminController(IAdminService admin) : ControllerBase
     public async Task<IActionResult> UpdateApprovalSettings(UpdateApprovalSettingsRequest request, CancellationToken ct)
     {
         await admin.UpdateApprovalSettingsAsync(request, ct);
+        return NoContent();
+    }
+
+    [HttpPut("workflow/feedback")]
+    public async Task<IActionResult> UpdateFeedbackSettings(UpdateFeedbackSettingsRequest request, CancellationToken ct)
+    {
+        await admin.UpdateFeedbackSettingsAsync(request, ct);
         return NoContent();
     }
 

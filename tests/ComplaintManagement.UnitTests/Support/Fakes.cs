@@ -151,6 +151,6 @@ internal sealed class SequentialNumbers : IComplaintNumberGenerator
     public static ComplaintManagement.Application.Complaints.ComplaintRegistrar Registrar(TestDbContext db, IIamOrganisationService org)
     {
         var clock = new FixedClock(DateTimeOffset.UtcNow);
-        return new(db, new SequentialNumbers(), org, clock, null!, new ComplaintManagement.Application.Notifications.CustomerNotifier(db, clock));
+        return new(db, new SequentialNumbers(), clock, null!, new ComplaintManagement.Application.Notifications.CustomerNotifier(db, clock));
     }
 }

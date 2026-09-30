@@ -23,7 +23,7 @@ public class AdminServiceTests
     [Fact]
     public async Task New_category_gets_normalised_code_and_its_TAT()
     {
-        await _admin.CreateCategoryAsync(new CreateCategoryRequest("kcc", "Kisan Credit Card", "DIGITAL_BANKING", 10, null, null, null, null), default);
+        await _admin.CreateCategoryAsync(new CreateCategoryRequest("kcc", "Kisan Credit Card", "DIGITAL_BANKING", 10, null, null, null), default);
         var cat = Assert.Single((await _admin.GetCategoriesAsync(default)).Categories, c => c.Code == "KCC");
         Assert.Equal(("DIGITAL_BANKING", "Digital Banking"), (cat.GroupCode, cat.Group));
         Assert.Equal(10, cat.TatDays);
@@ -35,13 +35,13 @@ public class AdminServiceTests
     [InlineData("a b")]   // invalid characters
     [InlineData("X")]     // too short
     public async Task Bad_or_duplicate_category_codes_are_rejected(string code) =>
-        await Assert.ThrowsAsync<DomainException>(() => _admin.CreateCategoryAsync(new CreateCategoryRequest(code, "Name", "DIGITAL_BANKING", null, null, null, null, null), default));
+        await Assert.ThrowsAsync<DomainException>(() => _admin.CreateCategoryAsync(new CreateCategoryRequest(code, "Name", "DIGITAL_BANKING", null, null, null, null), default));
 
     [Fact]
     public async Task Categories_must_belong_to_an_existing_group()
     {
-        await Assert.ThrowsAsync<DomainException>(() => _admin.CreateCategoryAsync(new CreateCategoryRequest("KCC", "KCC", "NOPE", null, null, null, null, null), default));
-        await Assert.ThrowsAsync<DomainException>(() => _admin.UpdateCategoryAsync("UPI", new UpdateCategoryRequest("UPI", "", 7, null, null, 10, true, null), default));
+        await Assert.ThrowsAsync<DomainException>(() => _admin.CreateCategoryAsync(new CreateCategoryRequest("KCC", "KCC", "NOPE", null, null, null, null), default));
+        await Assert.ThrowsAsync<DomainException>(() => _admin.UpdateCategoryAsync("UPI", new UpdateCategoryRequest("UPI", "", 7, null, 10, true, null), default));
     }
 
     [Fact]
@@ -52,7 +52,7 @@ public class AdminServiceTests
         await Assert.ThrowsAsync<DomainException>(() => _admin.CreateGroupAsync(new CreateCategoryGroupRequest("AGRI2", "digital banking", null), default)); // name taken
 
         await _admin.UpdateGroupAsync("AGRI", new UpdateCategoryGroupRequest("Agriculture & Rural", 5, true), default);
-        await _admin.UpdateCategoryAsync("UPI", new UpdateCategoryRequest("UPI", "AGRI", 7, null, null, 10, true, null), default);
+        await _admin.UpdateCategoryAsync("UPI", new UpdateCategoryRequest("UPI", "AGRI", 7, null, 10, true, null), default);
 
         var catalogue = await _admin.GetCategoriesAsync(default);
         Assert.Equal("Agriculture & Rural", catalogue.Groups[0].Name); // sorted first
@@ -90,23 +90,57 @@ public class AdminServiceTests
     [Fact]
     public async Task Unused_categories_are_deleted()
     {
-        await _admin.CreateCategoryAsync(new CreateCategoryRequest("KCC", "Kisan Credit Card", "DIGITAL_BANKING", null, null, null, null, null), default);
+        await _admin.CreateCategoryAsync(new CreateCategoryRequest("KCC", "Kisan Credit Card", "DIGITAL_BANKING", null, null, null, null), default);
         await _admin.DeleteCategoryAsync("KCC", default);
         Assert.DoesNotContain(_db.Categories, c => c.Code == "KCC");
         Assert.Contains(_audit.Entries, e => e.Action == "DELETE_CATEGORY");
     }
 
     [Fact]
-    public async Task Category_TAT_priority_and_department_are_validated()
+    public async Task Category_TAT_priority_and_division_are_validated()
     {
-        UpdateCategoryRequest Update(int? tat, string? priority, string? dept) => new("UPI", "DIGITAL_BANKING", tat, priority, dept, 10, true, null);
+        UpdateCategoryRequest Update(int? tat, string? priority, string? division) =>
+            new("UPI", "DIGITAL_BANKING", tat, priority, 10, true, null, HoDivisionCode: division);
         await Assert.ThrowsAsync<DomainException>(() => _admin.UpdateCategoryAsync("UPI", Update(0, null, null), default));
         await Assert.ThrowsAsync<DomainException>(() => _admin.UpdateCategoryAsync("UPI", Update(7, "URGENT", null), default));
         await Assert.ThrowsAsync<DomainException>(() => _admin.UpdateCategoryAsync("UPI", Update(7, null, "NOPE"), default));
 
         await _admin.UpdateCategoryAsync("UPI", Update(7, "MEDIUM", "DBD"), default);
         var cat = _db.Categories.Single(c => c.Code == "UPI");
-        Assert.Equal((7, "MEDIUM", "DBD"), (cat.TatDays, cat.DefaultPriorityCode, cat.DefaultDepartmentCode));
+        Assert.Equal((7, "MEDIUM", "DBD"), (cat.TatDays, cat.DefaultPriorityCode, cat.HoDivisionCode));
+    }
+
+    [Fact]
+    public async Task Categories_are_reordered_within_their_group()
+    {
+        await _admin.CreateCategoryAsync(new CreateCategoryRequest("KCC", "Kisan Credit Card", "DIGITAL_BANKING", null, null, null, null), default);
+        await _admin.ReorderCategoriesAsync("DIGITAL_BANKING", new ReorderRequest(["KCC", "UPI"]), default);
+        Assert.Equal(["KCC", "UPI"], (await _admin.GetCategoriesAsync(default)).Categories.Select(c => c.Code));
+        Assert.Contains(_audit.Entries, e => e.Action == "REORDER_CATEGORIES");
+    }
+
+    [Theory]
+    [InlineData("UPI")]          // one missing
+    [InlineData("UPI,KCC,X")]    // unknown code
+    [InlineData("UPI,UPI")]      // duplicate
+    public async Task A_reorder_must_list_every_item_exactly_once(string list)
+    {
+        var codes = list.Split(',');
+        await _admin.CreateCategoryAsync(new CreateCategoryRequest("KCC", "Kisan Credit Card", "DIGITAL_BANKING", null, null, null, null), default);
+        await Assert.ThrowsAsync<DomainException>(() => _admin.ReorderCategoriesAsync("DIGITAL_BANKING", new ReorderRequest(codes), default));
+    }
+
+    [Fact]
+    public async Task Groups_are_reordered_and_a_moved_category_goes_to_the_end_of_its_new_group()
+    {
+        await _admin.CreateGroupAsync(new CreateCategoryGroupRequest("AGRI", "Agri", null), default);
+        await _admin.CreateCategoryAsync(new CreateCategoryRequest("KCC", "Kisan Credit Card", "AGRI", null, null, null, null), default);
+        await _admin.ReorderGroupsAsync(new ReorderRequest(["AGRI", "DIGITAL_BANKING"]), default);
+        Assert.Equal(["AGRI", "DIGITAL_BANKING"], (await _admin.GetCategoriesAsync(default)).Groups.Select(g => g.Code));
+
+        await _admin.UpdateCategoryAsync("UPI", new UpdateCategoryRequest("UPI", "AGRI", 7, null, 5, true, null), default);
+        var agri = (await _admin.GetCategoriesAsync(default)).Categories.Where(c => c.GroupCode == "AGRI").Select(c => c.Code);
+        Assert.Equal(["KCC", "UPI"], agri);
     }
 
     [Fact]

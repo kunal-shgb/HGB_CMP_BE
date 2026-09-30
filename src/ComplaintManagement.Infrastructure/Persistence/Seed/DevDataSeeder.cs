@@ -49,7 +49,6 @@ public static class DevDataSeeder
         var branches = MockIamSeedData.Branches
             .Select(b => (b.Code, b.Name, RegionCode: b.RegionCode, RegionName: regionNames[b.RegionCode]))
             .ToList();
-        var departmentNames = MockIamSeedData.Departments.ToDictionary(d => d.Code, d => d.Name);
 
         // Sample: Customer Service Department's Checkers decide Head Office Makers' requests.
         var hoDept = await db.AppSettings.FirstOrDefaultAsync(x => x.Key == AppSettingKeys.HeadOfficeMakerCheckerDepartment, ct);
@@ -59,9 +58,7 @@ public static class DevDataSeeder
         var categories = await db.Categories.Include(c => c.Group).ToListAsync(ct);
         foreach (var category in categories)
         {
-            var digitalGroup = category.Group!.Code == "DIGITAL_BANKING";
-            category.TatDays = digitalGroup ? 7 : 15;
-            if (digitalGroup) category.DefaultDepartmentCode = "DBD";
+            category.TatDays = category.Group!.Code == "DIGITAL_BANKING" ? 7 : 15;
         }
 
         var statuses = await db.Statuses.ToDictionaryAsync(s => s.Code, ct);
@@ -103,8 +100,6 @@ public static class DevDataSeeder
                 TransactionId = digital ? $"{random.Next(100_000, 999_999)}{random.Next(100_000, 999_999)}" : null,
                 TransactionDate = digital ? DateOnly.FromDateTime(created.AddDays(-1).UtcDateTime) : null,
                 TransactionAmount = digital ? random.Next(100, 50_000) : null,
-                AssignedDepartmentCode = category.DefaultDepartmentCode,
-                AssignedDepartmentName = category.DefaultDepartmentCode is { } dept ? departmentNames[dept] : null,
                 SlaDueDate = SlaCalculator.DueDate(created, category.TatDays),
                 CreatedAt = created,
                 UpdatedAt = created,

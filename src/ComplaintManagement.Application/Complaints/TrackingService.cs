@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using ComplaintManagement.Application.Common;
+using ComplaintManagement.Application.Feedback;
 using ComplaintManagement.Contracts.Responses;
 using ComplaintManagement.Contracts.Requests;
 using ComplaintManagement.Application.Common.Interfaces;
@@ -123,10 +124,20 @@ public sealed class TrackingService(IApplicationDbContext db, TimeProvider clock
             .Where(r => r.Visibility == RemarkVisibility.Customer)
             .Select(r => new TrackingUpdate(r.CreatedAt, "Update from the Bank", r.Remark)));
 
+        // A closed complaint still open for feedback gets a fresh one-time token for the feedback form.
+        string? feedbackToken = null;
+        var feedbackGiven = c.ClosedAt is { } closed
+            && await db.ComplaintFeedback.AnyAsync(f => f.ComplaintId == c.Id && f.ForClosedAt == closed, ct);
+        if (c.ClosedAt is not null && FeedbackRules.IsOpen(c, c.ClosedAt.Value, feedbackGiven, await FeedbackRules.WindowDaysAsync(db, ct), clock.GetUtcNow()))
+        {
+            feedbackToken = FeedbackRules.Invite(db, c, "TRACKING", clock.GetUtcNow());
+            await db.SaveChangesAsync(ct);
+        }
+
         return new TrackingView(
             c.ComplaintNumber, c.Status!.CustomerLabel, c.Title, c.Category!.Name, c.BranchName,
             c.CreatedAt, c.UpdatedAt, c.ResolvedAt, c.ClosedAt,
-            updates.OrderByDescending(u => u.At).ToList());
+            updates.OrderByDescending(u => u.At).ToList(), feedbackToken, feedbackGiven);
     }
 
     private async Task<Complaint?> FindAsync(string? number, string? mobile, CancellationToken ct)

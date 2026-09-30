@@ -14,14 +14,13 @@ public sealed record IntakeActor(string ActorId, string ActorName, string Source
     string? StaffEmployeeId = null, string? StaffOfficeName = null);
 
 /// <summary>
-/// Builds and stages a new complaint: category, initial status, priority, default department, SLA,
+/// Builds and stages a new complaint: category, initial status, priority, SLA,
 /// supporting documents, the first history entry and the customer's acknowledgement. The caller adds its
 /// audit record and saves through <see cref="SaveAsync"/>.
 /// </summary>
 public sealed class ComplaintRegistrar(
     IApplicationDbContext db,
     IComplaintNumberGenerator numbers,
-    IIamOrganisationService org,
     TimeProvider clock,
     AttachmentStore attachments,
     CustomerNotifier notifier)
@@ -37,8 +36,6 @@ public sealed class ComplaintRegistrar(
         var priority = category.DefaultPriorityCode
             ?? await db.Priorities.Where(p => p.IsDefault && p.IsActive).Select(p => p.Code).FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("No default complaint priority is configured.");
-
-        var defaultDepartment = category.DefaultDepartmentCode is { } deptCode ? await org.FindDepartmentAsync(deptCode, ct) : null;
 
         // Documents are validated and stored before a number is issued, so a bad file does not burn a number.
         var complaintId = Guid.CreateVersion7();
@@ -71,8 +68,6 @@ public sealed class ComplaintRegistrar(
             TransactionId = NullIfBlank(d.TransactionId),
             TransactionDate = d.TransactionDate,
             TransactionAmount = d.Amount,
-            AssignedDepartmentCode = defaultDepartment?.Code,
-            AssignedDepartmentName = defaultDepartment?.Name,
             SlaDueDate = SlaCalculator.DueDate(now, category.TatDays),
             CreatedAt = now,
             UpdatedAt = now,

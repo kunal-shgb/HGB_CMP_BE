@@ -28,7 +28,6 @@ internal sealed class CategoryConfiguration : IEntityTypeConfiguration<Complaint
         b.Property(x => x.Description).HasMaxLength(500);
         b.HasIndex(x => x.Code).IsUnique();
         b.Property(x => x.DefaultPriorityCode).HasMaxLength(40);
-        b.Property(x => x.DefaultDepartmentCode).HasMaxLength(50);
         b.Property(x => x.RoDivisionCode).HasMaxLength(50);
         b.Property(x => x.HoDivisionCode).HasMaxLength(50);
         b.HasOne<ComplaintPriority>().WithMany().HasForeignKey(x => x.DefaultPriorityCode).OnDelete(DeleteBehavior.Restrict);

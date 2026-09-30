@@ -117,6 +117,14 @@ public sealed class ComplaintsController(IComplaintService complaints, IAttachme
     [HttpGet("{id:guid}/notifications")]
     public Task<IReadOnlyList<NotificationItem>> Notifications(Guid id, CancellationToken ct) => complaints.GetNotificationsAsync(id, ct);
 
+    /// <summary>Marks the customer's "not resolved" feedback as reviewed, with an optional note.</summary>
+    [HttpPost("{id:guid}/feedback/review")]
+    public async Task<IActionResult> ReviewFeedback(Guid id, ReviewFeedbackRequest request, CancellationToken ct)
+    {
+        await complaints.ReviewFeedbackAsync(id, request, ct);
+        return NoContent();
+    }
+
     [HttpPost("{id:guid}/escalate")]
     public async Task<IActionResult> Escalate(Guid id, EscalateRequest request, CancellationToken ct)
     {

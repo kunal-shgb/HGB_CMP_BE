@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<CustomerNotifier>();
         services.AddScoped<Common.Security.AssignmentPolicy>();
         services.AddScoped<ITrackingService, TrackingService>();
+        services.AddScoped<Feedback.IFeedbackService, Feedback.FeedbackService>();
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
         services.AddScoped<Common.Security.IRoleMappingService, Common.Security.RoleMappingService>();
         return services;

@@ -68,6 +68,7 @@ public class Complaint : AuditableEntity
     public List<ComplaintRemark> Remarks { get; set; } = [];
     public List<ComplaintAttachment> Attachments { get; set; } = [];
     public List<ComplaintEscalation> Escalations { get; set; } = [];
+    public List<ComplaintFeedback> Feedback { get; set; } = [];
 }
 
 public class ComplaintStatusHistory : Entity

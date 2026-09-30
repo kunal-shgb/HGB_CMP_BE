@@ -22,6 +22,8 @@ public sealed record ComplaintFilterRequest
     public int? MinEscalationLevel { get; init; }
     /// <summary>WEBSITE, BRANCH, REGIONAL_OFFICE or HEAD_OFFICE.</summary>
     public string? Source { get; init; }
+    /// <summary>Only closed complaints whose customer said the issue was not resolved, awaiting staff review.</summary>
+    public bool? FeedbackNeedsReview { get; init; }
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }
@@ -102,3 +104,9 @@ public sealed record TrackingVerifyRequest(string ComplaintNumber, string Mobile
 {
     public override string ToString() => $"TrackingVerifyRequest {{ ComplaintNumber = {ComplaintNumber} }}";
 }
+
+/// <summary>Customer feedback on a closed complaint. Resolved is required; Rating is 1–5.</summary>
+public sealed record SubmitFeedbackRequest(bool? Resolved, int Rating, string? Comment);
+
+/// <summary>Staff mark "not resolved" feedback as reviewed.</summary>
+public sealed record ReviewFeedbackRequest(string? Note);

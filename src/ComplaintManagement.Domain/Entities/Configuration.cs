@@ -22,8 +22,6 @@ public class ComplaintCategory : AuditableEntity
     public ComplaintCategoryGroup? Group { get; set; }
     /// <summary>Turn-around time in calendar days. Null until the Bank fixes SLA values.</summary>
     public int? TatDays { get; set; }
-    /// <summary>IAM department code that should own complaints of this category by default, if any.</summary>
-    public string? DefaultDepartmentCode { get; set; }
     public string? DefaultPriorityCode { get; set; }
 
     // Routing, set by the Admin. Division codes are IAM department codes; null means the whole office.

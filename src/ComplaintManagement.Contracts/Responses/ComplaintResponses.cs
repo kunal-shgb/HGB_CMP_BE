@@ -55,7 +55,17 @@ public sealed record ComplaintDetail(
     IReadOnlyList<RemarkItem> Remarks,
     /// <summary>Documents lodged with the complaint. Files added later belong to a remark.</summary>
     IReadOnlyList<AttachmentItem> Attachments,
-    ComplaintAbilities Abilities);
+    ComplaintAbilities Abilities,
+    /// <summary>The customer's latest feedback, if any.</summary>
+    FeedbackInfo? Feedback = null);
+
+/// <summary>
+/// Customer feedback on a closed complaint. NeedsReview: "not resolved" on the current closure and not yet
+/// reviewed by staff. CanReview: whether the caller may mark it reviewed.
+/// </summary>
+public sealed record FeedbackInfo(
+    bool Resolved, int Rating, string? Comment, DateTimeOffset SubmittedAt,
+    bool NeedsReview, EmployeeRef? ReviewedBy, DateTimeOffset? ReviewedAt, string? ReviewNote, bool CanReview);
 
 /// <summary>Customer identifiers are masked unless the caller may see them in full.</summary>
 public sealed record CustomerInfo(
@@ -141,7 +151,16 @@ public sealed record TrackingView(
     DateTimeOffset LastUpdatedAt,
     DateTimeOffset? ResolvedAt,
     DateTimeOffset? ClosedAt,
-    IReadOnlyList<TrackingUpdate> Updates);
+    IReadOnlyList<TrackingUpdate> Updates,
+    /// <summary>A one-time token for the feedback form, while the closed complaint is open for feedback.</summary>
+    string? FeedbackToken = null,
+    /// <summary>Feedback has already been given for the current closure.</summary>
+    bool FeedbackGiven = false);
+
+/// <summary>What the public feedback page shows. State: OPEN, SUBMITTED or EXPIRED. No personal data.</summary>
+public sealed record PublicFeedbackView(string ComplaintNumber, string Title, DateTimeOffset? ClosedAt, string State);
+
+public sealed record SubmitFeedbackResponse(string Message, bool FlaggedForReview);
 
 /// <summary>A status change as the customer sees it, or a remark staff marked visible to the customer.</summary>
 public sealed record TrackingUpdate(DateTimeOffset At, string Title, string? Detail);

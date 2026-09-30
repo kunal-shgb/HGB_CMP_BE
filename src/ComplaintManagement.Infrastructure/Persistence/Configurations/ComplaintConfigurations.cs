@@ -48,6 +48,7 @@ internal sealed class ComplaintConfiguration : IEntityTypeConfiguration<Complain
         b.HasMany(x => x.Remarks).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Attachments).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
         b.HasMany(x => x.Escalations).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
+        b.HasMany(x => x.Feedback).WithOne().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
 
         b.HasIndex(x => x.CreatedAt);
         b.HasIndex(x => x.StatusCode);
@@ -223,5 +224,32 @@ internal sealed class ComplaintNumberSequenceConfiguration : IEntityTypeConfigur
         b.ToTable("complaint_number_sequences");
         b.HasKey(x => x.Year);
         b.Property(x => x.Year).ValueGeneratedNever();
+    }
+}
+
+internal sealed class ComplaintFeedbackConfiguration : IEntityTypeConfiguration<ComplaintFeedback>
+{
+    public void Configure(EntityTypeBuilder<ComplaintFeedback> b)
+    {
+        b.ToTable("complaint_feedback");
+        b.Property(x => x.Comment).HasMaxLength(1000);
+        b.Property(x => x.ReviewedBy).HasMaxLength(32);
+        b.Property(x => x.ReviewedByName).HasMaxLength(150);
+        b.Property(x => x.ReviewNote).HasMaxLength(1000);
+        // One feedback per closure of a complaint.
+        b.HasIndex(x => new { x.ComplaintId, x.ForClosedAt }).IsUnique();
+        b.HasIndex(x => x.SubmittedAt);
+    }
+}
+
+internal sealed class FeedbackInvitationConfiguration : IEntityTypeConfiguration<FeedbackInvitation>
+{
+    public void Configure(EntityTypeBuilder<FeedbackInvitation> b)
+    {
+        b.ToTable("feedback_invitations");
+        b.Property(x => x.TokenHash).HasMaxLength(64);
+        b.Property(x => x.Source).HasMaxLength(32);
+        b.HasIndex(x => x.TokenHash).IsUnique();
+        b.HasOne<Complaint>().WithMany().HasForeignKey(x => x.ComplaintId).OnDelete(DeleteBehavior.Cascade);
     }
 }

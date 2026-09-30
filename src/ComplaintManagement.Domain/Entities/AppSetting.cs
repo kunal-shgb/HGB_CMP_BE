@@ -20,4 +20,7 @@ public static class AppSettingKeys
     public const string EscalateToRegionalOfficeAfterDays = "escalation.to_ro_after_overdue_days";
     /// <summary>Whole days past the TAT due date before a complaint is escalated to Head Office.</summary>
     public const string EscalateToHeadOfficeAfterDays = "escalation.to_ho_after_overdue_days";
+
+    /// <summary>Days after closure during which the customer may give feedback.</summary>
+    public const string FeedbackWindowDays = "feedback.window_days";
 }

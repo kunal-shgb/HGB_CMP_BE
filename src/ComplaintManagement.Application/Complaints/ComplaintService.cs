@@ -31,6 +31,8 @@ public interface IComplaintService
     Task<RemarkItem> AddRemarkAsync(Guid id, AddRemarkRequest request, IReadOnlyList<UploadFile> files, CancellationToken ct);
     Task EscalateAsync(Guid id, EscalateRequest request, CancellationToken ct);
     Task<IReadOnlyList<NotificationItem>> GetNotificationsAsync(Guid id, CancellationToken ct);
+    /// <summary>Marks the customer's "not resolved" feedback as reviewed. Needs the right to change the complaint's status.</summary>
+    Task ReviewFeedbackAsync(Guid id, ReviewFeedbackRequest request, CancellationToken ct);
 }
 
 public sealed class ComplaintService(
@@ -168,7 +170,8 @@ public sealed class ComplaintService(
                 .Select(r => ToRemarkItem(r, c.Attachments.Where(a => a.RemarkId == r.Id))).ToList(),
             c.Attachments.Where(a => a.RemarkId == null).OrderBy(a => a.UploadedAt)
                 .Select(Attachments.AttachmentService.ToItem).ToList(),
-            ComplaintAccess.Abilities(user, c, NextEscalationLevel(c) is not null, await assignment.CanAssignAsync(user, c, ct)));
+            ComplaintAccess.Abilities(user, c, NextEscalationLevel(c) is not null, await assignment.CanAssignAsync(user, c, ct)),
+            ToFeedbackInfo(c));
     }
 
     public async Task<IReadOnlyList<TimelineEvent>> GetHistoryAsync(Guid id, CancellationToken ct)
@@ -202,6 +205,18 @@ public sealed class ComplaintService(
             $"Escalated to {EscalationLevels.Name(e.ToLevel)}" + (e.ToDivisionName is null ? "" : $", {e.ToDivisionName}") + $" (level {e.ToLevel})",
             e.Reason,
             new EmployeeRef(e.EscalatedBy, e.EscalatedByName))));
+        events.AddRange(c.Feedback.Select(f => new TimelineEvent(
+            f.SubmittedAt,
+            "FEEDBACK",
+            $"Customer feedback: {(f.Resolved ? "resolved" : "not resolved")}, rated {f.Rating} of 5",
+            f.Comment,
+            new EmployeeRef("CUSTOMER", "Customer"))));
+        events.AddRange(c.Feedback.Where(f => f.ReviewedAt is not null).Select(f => new TimelineEvent(
+            f.ReviewedAt!.Value,
+            "FEEDBACK_REVIEWED",
+            "Customer feedback reviewed",
+            f.ReviewNote,
+            new EmployeeRef(f.ReviewedBy ?? "", f.ReviewedByName))));
         events.AddRange(c.Attachments.Select(a => new TimelineEvent(
             a.UploadedAt, "ATTACHMENT", "Attachment uploaded", a.FileName, new EmployeeRef(a.UploadedBy, a.UploadedByName))));
 
@@ -501,7 +516,7 @@ public sealed class ComplaintService(
     private void ApplyStatus(Complaint c, ComplaintStatus target, string? remarks)
     {
         var now = clock.GetUtcNow();
-        if (c.Status is { } from && from.Code != target.Code) notifier.StatusChanged(c, from, target);
+        var from = c.Status;
         db.ComplaintStatusHistory.Add(new ComplaintStatusHistory
         {
             ComplaintId = c.Id,
@@ -518,6 +533,8 @@ public sealed class ComplaintService(
         if (target.IsResolution) c.ResolvedAt = now;
         c.ClosedAt = target.IsTerminal ? now : null;
         if (!target.IsTerminal && !target.IsResolution) c.ResolvedAt = null;
+        // After the dates are set, so a closure message can carry a feedback link for this closure.
+        if (from is not null && from.Code != target.Code) notifier.StatusChanged(c, from, target);
     }
 
     private async Task<Complaint> LoadScopedAsync(Guid id, CancellationToken ct, bool includeChildren)
@@ -534,7 +551,8 @@ public sealed class ComplaintService(
                 .Include(c => c.Assignments)
                 .Include(c => c.Remarks)
                 .Include(c => c.Attachments)
-                .Include(c => c.Escalations);
+                .Include(c => c.Escalations)
+                .Include(c => c.Feedback);
         }
 
         // Out-of-scope complaints are reported as not found so their existence is not disclosed.
@@ -578,7 +596,38 @@ public sealed class ComplaintService(
         if (f.OverdueOnly == true) q = q.Where(c => c.ClosedAt == null && c.SlaDueDate != null && c.SlaDueDate < now);
         if (f.MinEscalationLevel is { } minLevel) q = q.Where(c => c.EscalationLevel >= minLevel);
         if (Clean(f.Source) is { } source) q = q.Where(c => c.Source == source);
+        if (f.FeedbackNeedsReview == true)
+            q = q.Where(c => c.Feedback.Any(x => !x.Resolved && x.ReviewedAt == null && c.ClosedAt != null && x.ForClosedAt == c.ClosedAt));
         return q;
+    }
+
+    public async Task ReviewFeedbackAsync(Guid id, ReviewFeedbackRequest request, CancellationToken ct)
+    {
+        var note = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+        if (note?.Length > 1000) throw new DomainException("feedback.note_too_long", "Keep the note under 1,000 characters.");
+        var c = await LoadScopedAsync(id, ct, includeChildren: true);
+        ComplaintAccess.Demand(user, c, Permissions.ComplaintChangeStatus);
+        var feedback = c.Feedback.FirstOrDefault(f => Feedback.FeedbackRules.NeedsReview(f, c))
+            ?? throw new DomainException("feedback.nothing_to_review", "There is no customer feedback waiting for review on this complaint.");
+
+        feedback.ReviewedAt = clock.GetUtcNow();
+        feedback.ReviewedBy = user.EmployeeId;
+        feedback.ReviewedByName = user.Name;
+        feedback.ReviewNote = note;
+        audit.Log("REVIEW_FEEDBACK", Module, c.Id.ToString(), note is null ? null : "with note");
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>The latest feedback, for staff. Review is possible for whoever may change the complaint's status.</summary>
+    private FeedbackInfo? ToFeedbackInfo(Complaint c)
+    {
+        var f = c.Feedback.OrderByDescending(x => x.SubmittedAt).FirstOrDefault();
+        if (f is null) return null;
+        var needsReview = Feedback.FeedbackRules.NeedsReview(f, c);
+        return new FeedbackInfo(
+            f.Resolved, f.Rating, f.Comment, f.SubmittedAt, needsReview,
+            f.ReviewedBy is null ? null : new EmployeeRef(f.ReviewedBy, f.ReviewedByName), f.ReviewedAt, f.ReviewNote,
+            needsReview && ComplaintAccess.Can(user, c, Permissions.ComplaintChangeStatus));
     }
 
     private static OrgRef SourceRef(string source) => new(source, ComplaintSources.Name(source));

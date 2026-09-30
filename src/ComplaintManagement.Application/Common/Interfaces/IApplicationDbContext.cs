@@ -6,6 +6,8 @@ namespace ComplaintManagement.Application.Common.Interfaces;
 public interface IApplicationDbContext
 {
     DbSet<Complaint> Complaints { get; }
+    DbSet<ComplaintFeedback> ComplaintFeedback { get; }
+    DbSet<FeedbackInvitation> FeedbackInvitations { get; }
     DbSet<ComplaintCategoryGroup> CategoryGroups { get; }
     DbSet<ComplaintStatusHistory> ComplaintStatusHistory { get; }
     DbSet<ComplaintAssignment> ComplaintAssignments { get; }

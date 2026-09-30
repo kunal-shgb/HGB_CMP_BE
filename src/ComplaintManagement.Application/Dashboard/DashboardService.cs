@@ -74,6 +74,17 @@ public sealed class DashboardService(
                 return age >= b.From && age <= b.To;
             }))).ToList();
 
-        return new DashboardSummary(total, pending, overdue, dueSoon, escalated, byStatus, trend, byCategory, byRegion, ageing);
+        // Customer feedback on complaints in scope: received in the period, and "not resolved" still awaiting review.
+        var feedback = await scoped.SelectMany(c => c.Feedback).Where(f => f.SubmittedAt >= since)
+            .Select(f => new { f.Rating, f.Resolved }).ToListAsync(ct);
+        var needsReview = await scoped.CountAsync(c => c.Feedback.Any(f =>
+            !f.Resolved && f.ReviewedAt == null && c.ClosedAt != null && f.ForClosedAt == c.ClosedAt), ct);
+        var feedbackSummary = new FeedbackSummary(
+            feedback.Count,
+            feedback.Count == 0 ? null : Math.Round(feedback.Average(f => f.Rating), 1),
+            feedback.Count(f => !f.Resolved),
+            needsReview);
+
+        return new DashboardSummary(total, pending, overdue, dueSoon, escalated, byStatus, trend, byCategory, byRegion, ageing, feedbackSummary);
     }
 }

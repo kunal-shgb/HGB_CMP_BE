@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace ComplaintManagement.Application.Admin;
 
 /// <summary>
-/// Admin configuration: category groups and categories (with TAT, default priority and department), status labels, status transitions and approval
+/// Admin configuration: category groups and categories (with TAT, default priority and escalation route), status labels, status transitions and approval
 /// routing. Changes apply to new actions; existing complaints and open approvals keep what they had.
 /// </summary>
 public interface IAdminService
@@ -19,6 +19,10 @@ public interface IAdminService
     Task CreateGroupAsync(CreateCategoryGroupRequest request, CancellationToken ct);
     Task UpdateGroupAsync(string code, UpdateCategoryGroupRequest request, CancellationToken ct);
     Task DeleteGroupAsync(string code, CancellationToken ct);
+    /// <summary>Sets the order of all groups on complaint forms.</summary>
+    Task ReorderGroupsAsync(ReorderRequest request, CancellationToken ct);
+    /// <summary>Sets the order of the categories within one group.</summary>
+    Task ReorderCategoriesAsync(string groupCode, ReorderRequest request, CancellationToken ct);
     Task CreateCategoryAsync(CreateCategoryRequest request, CancellationToken ct);
     Task UpdateCategoryAsync(string code, UpdateCategoryRequest request, CancellationToken ct);
     Task DeleteCategoryAsync(string code, CancellationToken ct);
@@ -29,6 +33,7 @@ public interface IAdminService
     Task UpdateTransitionAsync(int id, UpdateTransitionRequest request, CancellationToken ct);
     Task UpdateApprovalSettingsAsync(UpdateApprovalSettingsRequest request, CancellationToken ct);
     Task UpdateEscalationSettingsAsync(UpdateEscalationSettingsRequest request, CancellationToken ct);
+    Task UpdateFeedbackSettingsAsync(UpdateFeedbackSettingsRequest request, CancellationToken ct);
 }
 
 public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisationService org, ICurrentUser user, IAuditLogger audit, TimeProvider clock) : IAdminService
@@ -54,7 +59,7 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
             .Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, ct);
 
         return new AdminCategoryCatalogue(groups, categories.Select(c => new AdminCategory(
-            c.Code, c.Name, c.Group!.Code, c.Group.Name, c.TatDays, c.DefaultPriorityCode, c.DefaultDepartmentCode,
+            c.Code, c.Name, c.Group!.Code, c.Group.Name, c.TatDays, c.DefaultPriorityCode,
             c.SortOrder, c.IsActive, c.Description, used.GetValueOrDefault(c.Id),
             c.RoDivisionCode, c.HoDivisionCode, c.DirectToHeadOffice)).ToList());
     }
@@ -109,6 +114,41 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
         await db.SaveChangesAsync(ct);
     }
 
+    public async Task ReorderGroupsAsync(ReorderRequest r, CancellationToken ct)
+    {
+        var groups = await db.CategoryGroups.ToListAsync(ct);
+        ApplyOrder(groups, g => g.Code, (g, order) => g.SortOrder = order, r.Codes, "group");
+        var now = clock.GetUtcNow();
+        foreach (var g in groups) g.UpdatedAt = now;
+        audit.Log("REORDER_CATEGORY_GROUPS", Module, null, string.Join(",", r.Codes));
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task ReorderCategoriesAsync(string groupCode, ReorderRequest r, CancellationToken ct)
+    {
+        var group = await db.CategoryGroups.FirstOrDefaultAsync(g => g.Code == groupCode, ct) ?? throw new NotFoundException("Group", groupCode);
+        var categories = await db.Categories.Where(c => c.GroupId == group.Id).ToListAsync(ct);
+        ApplyOrder(categories, c => c.Code, (c, order) => c.SortOrder = order, r.Codes, "category");
+        var now = clock.GetUtcNow();
+        foreach (var c in categories) c.UpdatedAt = now;
+        audit.Log("REORDER_CATEGORIES", Module, groupCode, string.Join(",", r.Codes));
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Numbers the items 10, 20, 30... in the requested order. The request must list every item exactly once,
+    /// so a stale screen cannot drop or duplicate one.
+    /// </summary>
+    private static void ApplyOrder<T>(IReadOnlyList<T> items, Func<T, string> code, Action<T, int> setOrder, IReadOnlyList<string>? requested, string what)
+    {
+        var codes = (requested ?? []).Select(c => (c ?? "").Trim()).ToList();
+        if (codes.Count != items.Count || codes.Distinct(StringComparer.Ordinal).Count() != codes.Count
+            || !items.Select(code).ToHashSet(StringComparer.Ordinal).SetEquals(codes))
+            throw new DomainException("admin.stale_order", $"The {what} list has changed since you opened it. Reload the page and try again.");
+        var byCode = items.ToDictionary(code, StringComparer.Ordinal);
+        for (var i = 0; i < codes.Count; i++) setOrder(byCode[codes[i]], (i + 1) * 10);
+    }
+
     public async Task CreateCategoryAsync(CreateCategoryRequest r, CancellationToken ct)
     {
         var code = NormaliseCode(r.Code);
@@ -128,12 +168,12 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
             GroupId = group.Id,
             TatDays = r.TatDays,
             DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct),
-            DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct),
             // A category that skips the RO has no RO division.
             RoDivisionCode = r.DirectToHeadOffice ? null : await ResolveDepartmentAsync(r.RoDivisionCode, ct),
             HoDivisionCode = await ResolveDepartmentAsync(r.HoDivisionCode, ct),
             DirectToHeadOffice = r.DirectToHeadOffice,
-            SortOrder = r.SortOrder ?? ((await db.Categories.MaxAsync(c => (int?)c.SortOrder, ct) ?? 0) + 10),
+            // New categories go to the end of their group.
+            SortOrder = r.SortOrder ?? ((await db.Categories.Where(c => c.GroupId == group.Id).MaxAsync(c => (int?)c.SortOrder, ct) ?? 0) + 10),
             Description = Blank(r.Description),
             CreatedAt = now,
             UpdatedAt = now,
@@ -151,15 +191,18 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
         var category = await db.Categories.FirstOrDefaultAsync(c => c.Code == code, ct) ?? throw new NotFoundException("Category", code);
         var group = await ResolveGroupAsync(r.GroupCode, ct);
 
+        // Moving to another group puts the category at the end of that group; otherwise the given order stands.
+        var sortOrder = category.GroupId == group.Id
+            ? r.SortOrder
+            : (await db.Categories.Where(c => c.GroupId == group.Id).MaxAsync(c => (int?)c.SortOrder, ct) ?? 0) + 10;
         category.Name = r.Name.Trim();
         category.GroupId = group.Id;
         category.TatDays = r.TatDays;
         category.DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct);
-        category.DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct);
         category.RoDivisionCode = r.DirectToHeadOffice ? null : await ResolveDepartmentAsync(r.RoDivisionCode, ct);
         category.HoDivisionCode = await ResolveDepartmentAsync(r.HoDivisionCode, ct);
         category.DirectToHeadOffice = r.DirectToHeadOffice;
-        category.SortOrder = r.SortOrder;
+        category.SortOrder = sortOrder;
         category.IsActive = r.IsActive;
         category.Description = Blank(r.Description);
         category.UpdatedAt = clock.GetUtcNow();
@@ -202,7 +245,7 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
         var escalation = await Escalation.EscalationSettings.LoadAsync(db, ct);
         return new AdminWorkflow(statuses, transitions, new ApprovalSettings(department),
             new EscalationSettingsDto(escalation.Enabled, escalation.ToRegionalOfficeAfterDays, escalation.ToHeadOfficeAfterDays),
-            departments, priorities);
+            departments, priorities, new FeedbackSettingsDto(await Feedback.FeedbackRules.WindowDaysAsync(db, ct)));
     }
 
     public async Task UpdateStatusAsync(string code, UpdateStatusRequest r, CancellationToken ct)
@@ -289,6 +332,15 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
         await SetAsync(AppSettingKeys.EscalateToHeadOfficeAfterDays, r.ToHeadOfficeAfterDays.ToString(), ct);
         audit.Log("UPDATE_ESCALATION_SETTINGS", Module, "escalation",
             $"enabled={r.Enabled} ro={r.ToRegionalOfficeAfterDays}d ho={r.ToHeadOfficeAfterDays}d");
+        await db.SaveChangesAsync(ct);
+    }
+
+    public async Task UpdateFeedbackSettingsAsync(UpdateFeedbackSettingsRequest r, CancellationToken ct)
+    {
+        if (r.WindowDays is < 1 or > 365)
+            throw new DomainException("admin.invalid_feedback_window", "The feedback window must be between 1 and 365 days.");
+        await SetAsync(AppSettingKeys.FeedbackWindowDays, r.WindowDays.ToString(), ct);
+        audit.Log("UPDATE_FEEDBACK_SETTINGS", Module, "feedback", $"window={r.WindowDays}d");
         await db.SaveChangesAsync(ct);
     }
 

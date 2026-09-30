@@ -12,6 +12,8 @@ internal sealed class TestDbContext(DbContextOptions<TestDbContext> options) : D
     public DbSet<ComplaintRemark> ComplaintRemarks => Set<ComplaintRemark>();
     public DbSet<ComplaintAttachment> ComplaintAttachments => Set<ComplaintAttachment>();
     public DbSet<ComplaintCategoryGroup> CategoryGroups => Set<ComplaintCategoryGroup>();
+    public DbSet<ComplaintFeedback> ComplaintFeedback => Set<ComplaintFeedback>();
+    public DbSet<FeedbackInvitation> FeedbackInvitations => Set<FeedbackInvitation>();
     public DbSet<ComplaintCategory> Categories => Set<ComplaintCategory>();
     public DbSet<ComplaintStatus> Statuses => Set<ComplaintStatus>();
     public DbSet<ComplaintStatusTransition> StatusTransitions => Set<ComplaintStatusTransition>();

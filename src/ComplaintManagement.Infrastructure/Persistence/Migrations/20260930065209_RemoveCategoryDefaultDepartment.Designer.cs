@@ -3,6 +3,7 @@ using System;
 using ComplaintManagement.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ComplaintManagement.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930065209_RemoveCategoryDefaultDepartment")]
+    partial class RemoveCategoryDefaultDepartment
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1282,70 +1285,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.ToTable("complaint_escalations", (string)null);
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintFeedback", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Comment")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("comment");
-
-                    b.Property<Guid>("ComplaintId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("complaint_id");
-
-                    b.Property<DateTimeOffset>("ForClosedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("for_closed_at");
-
-                    b.Property<int>("Rating")
-                        .HasColumnType("integer")
-                        .HasColumnName("rating");
-
-                    b.Property<bool>("Resolved")
-                        .HasColumnType("boolean")
-                        .HasColumnName("resolved");
-
-                    b.Property<string>("ReviewNote")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)")
-                        .HasColumnName("review_note");
-
-                    b.Property<DateTimeOffset?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.Property<string>("ReviewedBy")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("reviewed_by");
-
-                    b.Property<string>("ReviewedByName")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("reviewed_by_name");
-
-                    b.Property<DateTimeOffset>("SubmittedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("submitted_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_complaint_feedback");
-
-                    b.HasIndex("SubmittedAt")
-                        .HasDatabaseName("ix_complaint_feedback_submitted_at");
-
-                    b.HasIndex("ComplaintId", "ForClosedAt")
-                        .IsUnique()
-                        .HasDatabaseName("ix_complaint_feedback_complaint_id_for_closed_at");
-
-                    b.ToTable("complaint_feedback", (string)null);
-                });
-
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintPriority", b =>
                 {
                     b.Property<string>("Code")
@@ -2055,54 +1994,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.FeedbackInvitation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ComplaintId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("complaint_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTimeOffset>("ForClosedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("for_closed_at");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("source");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("token_hash");
-
-                    b.Property<DateTimeOffset?>("UsedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("used_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_feedback_invitations");
-
-                    b.HasIndex("ComplaintId")
-                        .HasDatabaseName("ix_feedback_invitations_complaint_id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique()
-                        .HasDatabaseName("ix_feedback_invitations_token_hash");
-
-                    b.ToTable("feedback_invitations", (string)null);
-                });
-
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2361,16 +2252,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_complaint_escalations_complaints_complaint_id");
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintFeedback", b =>
-                {
-                    b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
-                        .WithMany("Feedback")
-                        .HasForeignKey("ComplaintId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_complaint_feedback_complaints_complaint_id");
-                });
-
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.ComplaintRemark", b =>
                 {
                     b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
@@ -2408,16 +2289,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_complaint_status_transitions_complaint_statuses_to_status_c~");
                 });
 
-            modelBuilder.Entity("ComplaintManagement.Domain.Entities.FeedbackInvitation", b =>
-                {
-                    b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
-                        .WithMany()
-                        .HasForeignKey("ComplaintId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_feedback_invitations_complaints_complaint_id");
-                });
-
             modelBuilder.Entity("ComplaintManagement.Domain.Entities.Notification", b =>
                 {
                     b.HasOne("ComplaintManagement.Domain.Entities.Complaint", null)
@@ -2444,8 +2315,6 @@ namespace ComplaintManagement.Infrastructure.Persistence.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("Escalations");
-
-                    b.Navigation("Feedback");
 
                     b.Navigation("Remarks");
 
