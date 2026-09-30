@@ -51,6 +51,12 @@ public class Complaint : AuditableEntity
     public string? AssignedDepartmentName { get; set; }
     /// <summary>See <see cref="EscalationLevels"/>. Only ever goes up.</summary>
     public int EscalationLevel { get; set; } = EscalationLevels.Branch;
+    /// <summary>
+    /// The division (IAM department) the complaint was escalated to at its current level, and its name at the time.
+    /// While set, only that division's staff at that office act on it. Null: the whole office.
+    /// </summary>
+    public string? EscalatedDivisionCode { get; set; }
+    public string? EscalatedDivisionName { get; set; }
 
     // SLA / lifecycle
     public DateTimeOffset? SlaDueDate { get; set; }

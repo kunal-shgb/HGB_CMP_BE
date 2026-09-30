@@ -2,7 +2,7 @@ namespace ComplaintManagement.Infrastructure.IAM.Mock;
 
 /// <summary>
 /// Dummy organisation and employees for the mock IAM store (fictional people; sample offices).
-/// Add rows here: missing codes are inserted on the next startup.
+/// Add rows here: missing codes are inserted on the next startup, and existing users' departments follow this list.
 /// </summary>
 public static class MockIamSeedData
 {
@@ -52,11 +52,14 @@ public static class MockIamSeedData
         new("100004", "MEENAKSHI JAIN", "CHIEF MANAGER - IT", "Checker", 23, "DBD", 5, "0000", HoName, Ho, "9000000003"),
         new("100002", "SUNITA MALIK", "MANAGER", "Maker", 20, "CSD", 5, "0000", HoName, Ho, "9000000004"),
         new("100003", "ROHIT BANSAL", "MANAGER - IT", "Maker", 23, "DBD", 5, "0000", HoName, Ho, "9000000005"),
-        // Regional Offices
-        new("200001", "PRIYA VERMA", "SENIOR MANAGER", "Checker", null, null, 11, "RO-ROH", "Regional Office — Rohtak", Ro, "9000000006"),
-        new("200003", "SANJAY DALAL", "MANAGER", "Maker", null, null, 11, "RO-ROH", "Regional Office — Rohtak", Ro, "9000000007"),
-        new("200002", "MANOJ JANGRA", "SENIOR MANAGER", "Checker", null, null, 12, "RO-HSR", "Regional Office — Hisar", Ro, "9000000008"),
-        new("200004", "KULDEEP MALIK", "SENIOR MANAGER", "Checker", null, null, 13, "RO-KNL", "Regional Office — Karnal", Ro, "9000000009"),
+        // Regional Offices. Divisions use the same department codes as Head Office.
+        new("200005", "VIKAS NARWAL", "SENIOR MANAGER", "Checker", 20, "CSD", 11, "RO-ROH", "Regional Office — Rohtak", Ro, "9000000019"),
+        new("200006", "REENA KADIAN", "MANAGER", "Maker", 20, "CSD", 11, "RO-ROH", "Regional Office — Rohtak", Ro, "9000000020"),
+        new("200011", "SURESH GULIA", "SENIOR MANAGER", "Checker", 20, "CSD", 14, "RO-JHJ", "Regional Office — Jhajjar", Ro, "9000000021"),
+        new("200001", "PRIYA VERMA", "SENIOR MANAGER", "Checker", 23, "DBD", 11, "RO-ROH", "Regional Office — Rohtak", Ro, "9000000006"),
+        new("200003", "SANJAY DALAL", "MANAGER", "Maker", 23, "DBD", 11, "RO-ROH", "Regional Office — Rohtak", Ro, "9000000007"),
+        new("200002", "MANOJ JANGRA", "SENIOR MANAGER", "Checker", 20, "CSD", 12, "RO-HSR", "Regional Office — Hisar", Ro, "9000000008"),
+        new("200004", "KULDEEP MALIK", "SENIOR MANAGER", "Checker", 20, "CSD", 13, "RO-KNL", "Regional Office — Karnal", Ro, "9000000009"),
         // Branches: the OfficeHead works complaints; other staff (NoRole) view, or work what the OfficeHead assigns them.
         new("300001", "RAKESH KUMAR", "BRANCH MANAGER", "OfficeHead", 11, "GENL", 101, "BR-ROH-001", "Rohtak Main", Br, "9000000010"),
         new("300005", "SONIA RATHI", "OFFICE ASSISTANT", "NoRole", 11, "GENL", 101, "BR-ROH-001", "Rohtak Main", Br, "9000000017"),
@@ -66,7 +69,7 @@ public static class MockIamSeedData
         // Jhajjar: a clean office with no sample complaints, for trying the flow end to end.
         new("300010", "AMIT DESWAL", "BRANCH MANAGER", "OfficeHead", 11, "GENL", 110, "BR-JHJ-001", "Jhajjar Main", Br, "9000000015"),
         new("300011", "PARVEEN KUMAR", "OFFICE ASSISTANT", "NoRole", 11, "GENL", 110, "BR-JHJ-001", "Jhajjar Main", Br, "9000000018"),
-        new("200010", "RITU SANGWAN", "SENIOR MANAGER", "Checker", null, null, 14, "RO-JHJ", "Regional Office — Jhajjar", Ro, "9000000016"),
+        new("200010", "RITU SANGWAN", "SENIOR MANAGER", "Checker", 23, "DBD", 14, "RO-JHJ", "Regional Office — Jhajjar", Ro, "9000000016"),
         new("300099", "INACTIVE OFFICER", "OFFICER", "NoRole", 11, "GENL", 101, "BR-ROH-001", "Rohtak Main", Br, "9000000014", IsActive: false),
     ];
 }

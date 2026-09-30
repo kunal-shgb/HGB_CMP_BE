@@ -8,7 +8,8 @@ public sealed record AdminCategoryGroup(string Code, string Name, int SortOrder,
 
 /// <summary>A category can be deleted only while no complaint uses it (ComplaintCount = 0).</summary>
 public sealed record AdminCategory(string Code, string Name, string GroupCode, string Group, int? TatDays, string? DefaultPriorityCode,
-    string? DefaultDepartmentCode, int SortOrder, bool IsActive, string? Description, int ComplaintCount);
+    string? DefaultDepartmentCode, int SortOrder, bool IsActive, string? Description, int ComplaintCount,
+    string? RoDivisionCode, string? HoDivisionCode, bool DirectToHeadOffice);
 
 public sealed record AdminStatus(
     string Code, string Name, string CustomerLabel, bool IsInitial, bool IsTerminal, bool IsResolution,

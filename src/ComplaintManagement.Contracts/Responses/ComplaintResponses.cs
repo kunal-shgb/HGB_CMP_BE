@@ -41,6 +41,8 @@ public sealed record ComplaintDetail(
     EmployeeRef? AssignedTo,
     OrgRef? AssignedDepartment,
     int EscalationLevel,
+    /// <summary>The division the complaint was escalated to at its current level; only its staff there act on it.</summary>
+    OrgRef? EscalatedDivision,
     /// <summary>Whether the caller may escalate this complaint one level up now.</summary>
     bool CanEscalate,
     SlaInfo Sla,

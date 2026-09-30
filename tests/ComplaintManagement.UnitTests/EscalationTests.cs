@@ -20,7 +20,7 @@ public class AutomaticEscalationTests
 
     public AutomaticEscalationTests() => _data = TestData.Seed(_db);
 
-    private EscalationService Service => new(_db, _clock, NullLogger<EscalationService>.Instance);
+    private EscalationService Service => new(_db, _data.Org, _clock, NullLogger<EscalationService>.Instance);
 
     private Complaint Overdue(double days, string status = "UNDER_PROCESS")
     {

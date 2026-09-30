@@ -25,6 +25,15 @@ public class ComplaintCategory : AuditableEntity
     /// <summary>IAM department code that should own complaints of this category by default, if any.</summary>
     public string? DefaultDepartmentCode { get; set; }
     public string? DefaultPriorityCode { get; set; }
+
+    // Routing, set by the Admin. Division codes are IAM department codes; null means the whole office.
+    /// <summary>Division of the Regional Office that takes escalations and branch approvals for this category.</summary>
+    public string? RoDivisionCode { get; set; }
+    /// <summary>Division of Head Office that takes escalations and RO approvals for this category.</summary>
+    public string? HoDivisionCode { get; set; }
+    /// <summary>Branch escalations and approvals skip the Regional Office and go straight to Head Office.</summary>
+    public bool DirectToHeadOffice { get; set; }
+
     public int SortOrder { get; set; }
     public bool IsActive { get; set; } = true;
 }

@@ -3,10 +3,16 @@ namespace ComplaintManagement.Contracts.Requests;
 public sealed record CreateCategoryGroupRequest(string Code, string Name, int? SortOrder);
 public sealed record UpdateCategoryGroupRequest(string Name, int SortOrder, bool IsActive);
 
+/// <summary>
+/// RoDivisionCode / HoDivisionCode: the department that takes this category's escalations and approvals at the
+/// Regional Office / Head Office (null: the whole office). DirectToHeadOffice: branch escalations and approvals skip the RO.
+/// </summary>
 public sealed record CreateCategoryRequest(string Code, string Name, string GroupCode, int? TatDays, string? DefaultPriorityCode,
-    string? DefaultDepartmentCode, int? SortOrder, string? Description);
+    string? DefaultDepartmentCode, int? SortOrder, string? Description,
+    string? RoDivisionCode = null, string? HoDivisionCode = null, bool DirectToHeadOffice = false);
 public sealed record UpdateCategoryRequest(string Name, string GroupCode, int? TatDays, string? DefaultPriorityCode,
-    string? DefaultDepartmentCode, int SortOrder, bool IsActive, string? Description);
+    string? DefaultDepartmentCode, int SortOrder, bool IsActive, string? Description,
+    string? RoDivisionCode = null, string? HoDivisionCode = null, bool DirectToHeadOffice = false);
 
 
 public sealed record UpdateStatusRequest(string Name, string CustomerLabel);

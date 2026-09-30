@@ -160,6 +160,10 @@ Levels follow the spec's ladder: 1 Branch, 2 Regional Office, 3 Head Office (the
 - **Manual:** `POST /api/v1/complaints/{id}/escalate` with a reason. Makers and Checkers raise a complaint one level above the higher of its current level and their own office: a branch to its RO, an RO to Head Office. Head Office cannot escalate further.
 - Filter with `minEscalationLevel`; the dashboard shows open escalated complaints.
 
+
+### Routing by category
+
+The Admin sets each category's flow on the categories screen: the **RO division** and **HO division** (IAM department codes; RO staff carry a `departmentName` from the same list as HO) that receive its escalations and Checker approvals, and whether it goes **straight to Head Office**. A branch escalation goes to the RO division (or the HO division when the category skips the RO); an RO escalation goes to the HO division; automatic escalation follows the same route. Branch approvals go to the RO division's Checkers (or the HO division's, when skipping the RO); RO approvals go to the HO division's Checkers. While a complaint sits with a division, other staff at that office can see it but not act on it. Categories with no route keep the whole-office behaviour.
 ## Customer tracking
 
 `POST /api/v1/public/tracking/otp` takes a complaint number and the registered mobile. If they match, a 6-digit one-time code (valid `Tracking:OtpLifetimeMinutes`, 10) is queued as an SMS through the notification outbox; the response is the same whether or not they matched, so the endpoint cannot be used to discover complaints. At most `Tracking:MaxOtpsPerWindow` (3) codes per complaint per `Tracking:OtpWindowMinutes` (15). `POST /api/v1/public/tracking/verify` with the code returns a customer-safe view: customer-facing status, dates, category, branch, the customer-visible status changes and remarks marked visible to the customer. No internal remarks, staff names or assignment details. A code works once and locks after `Tracking:MaxOtpAttempts` (5) wrong tries. Codes are stored only as salted SHA-256 hashes, never logged, and blanked from the outbox after sending; every request, failure and view is audited.

@@ -57,6 +57,17 @@ public static class MockIamSetup
             .Select(d => new MockIamDepartment { Code = d.Code, Name = d.Name }));
         await db.SaveChangesAsync(ct);
 
+        // Keep existing dummy users' departments in step with the seed list (e.g. RO divisions added later).
+        var seeded = MockIamSeedData.Users.ToDictionary(u => u.EmployeeCode);
+        foreach (var user in await db.Users.ToListAsync(ct))
+        {
+            if (!seeded.TryGetValue(user.EmployeeCode, out var seed) || user.DepartmentName == seed.DepartmentName) continue;
+            user.DepartmentId = seed.DepartmentId;
+            user.DepartmentName = seed.DepartmentName;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        await db.SaveChangesAsync(ct);
+
         var existing = await db.Users.Select(u => u.EmployeeCode).ToListAsync(ct);
         var missing = MockIamSeedData.Users.Where(u => !existing.Contains(u.EmployeeCode)).ToList();
         if (missing.Count == 0) return;

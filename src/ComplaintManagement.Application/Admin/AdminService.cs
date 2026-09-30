@@ -55,7 +55,8 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
 
         return new AdminCategoryCatalogue(groups, categories.Select(c => new AdminCategory(
             c.Code, c.Name, c.Group!.Code, c.Group.Name, c.TatDays, c.DefaultPriorityCode, c.DefaultDepartmentCode,
-            c.SortOrder, c.IsActive, c.Description, used.GetValueOrDefault(c.Id))).ToList());
+            c.SortOrder, c.IsActive, c.Description, used.GetValueOrDefault(c.Id),
+            c.RoDivisionCode, c.HoDivisionCode, c.DirectToHeadOffice)).ToList());
     }
 
     public async Task CreateGroupAsync(CreateCategoryGroupRequest r, CancellationToken ct)
@@ -128,12 +129,16 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
             TatDays = r.TatDays,
             DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct),
             DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct),
+            // A category that skips the RO has no RO division.
+            RoDivisionCode = r.DirectToHeadOffice ? null : await ResolveDepartmentAsync(r.RoDivisionCode, ct),
+            HoDivisionCode = await ResolveDepartmentAsync(r.HoDivisionCode, ct),
+            DirectToHeadOffice = r.DirectToHeadOffice,
             SortOrder = r.SortOrder ?? ((await db.Categories.MaxAsync(c => (int?)c.SortOrder, ct) ?? 0) + 10),
             Description = Blank(r.Description),
             CreatedAt = now,
             UpdatedAt = now,
         });
-        audit.Log("CREATE_CATEGORY", Module, code, $"group={group.Code} tat={r.TatDays?.ToString() ?? "none"}");
+        audit.Log("CREATE_CATEGORY", Module, code, $"group={group.Code} tat={r.TatDays?.ToString() ?? "none"} {Route(r.RoDivisionCode, r.HoDivisionCode, r.DirectToHeadOffice)}");
         await db.SaveChangesAsync(ct);
     }
 
@@ -151,12 +156,15 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
         category.TatDays = r.TatDays;
         category.DefaultPriorityCode = await ResolvePriorityAsync(r.DefaultPriorityCode, ct);
         category.DefaultDepartmentCode = await ResolveDepartmentAsync(r.DefaultDepartmentCode, ct);
+        category.RoDivisionCode = r.DirectToHeadOffice ? null : await ResolveDepartmentAsync(r.RoDivisionCode, ct);
+        category.HoDivisionCode = await ResolveDepartmentAsync(r.HoDivisionCode, ct);
+        category.DirectToHeadOffice = r.DirectToHeadOffice;
         category.SortOrder = r.SortOrder;
         category.IsActive = r.IsActive;
         category.Description = Blank(r.Description);
         category.UpdatedAt = clock.GetUtcNow();
         audit.Log("UPDATE_CATEGORY", Module, code,
-            $"group={group.Code} tat={r.TatDays?.ToString() ?? "none"} active={r.IsActive}");
+            $"group={group.Code} tat={r.TatDays?.ToString() ?? "none"} active={r.IsActive} {Route(r.RoDivisionCode, r.HoDivisionCode, r.DirectToHeadOffice)}");
         await db.SaveChangesAsync(ct);
     }
 
@@ -361,4 +369,7 @@ public sealed partial class AdminService(IApplicationDbContext db, IIamOrganisat
     }
 
     private static string? Blank(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private static string Route(string? ro, string? ho, bool direct) =>
+        direct ? $"route=HO:{Blank(ho) ?? "any"}" : $"route=RO:{Blank(ro) ?? "any"}>HO:{Blank(ho) ?? "any"}";
 }

@@ -155,6 +155,7 @@ public sealed class ComplaintService(
             c.AssignedEmployeeId is null ? null : new EmployeeRef(c.AssignedEmployeeId, c.AssignedEmployeeName),
             c.AssignedDepartmentCode is null ? null : new OrgRef(c.AssignedDepartmentCode, c.AssignedDepartmentName ?? c.AssignedDepartmentCode),
             c.EscalationLevel,
+            c.EscalatedDivisionCode is null ? null : new OrgRef(c.EscalatedDivisionCode, c.EscalatedDivisionName ?? c.EscalatedDivisionCode),
             NextEscalationLevel(c) is not null,
             BuildSla(c.CreatedAt, c.SlaDueDate, c.ClosedAt, now),
             c.CreatedAt,
@@ -198,7 +199,7 @@ public sealed class ComplaintService(
         events.AddRange(c.Escalations.Select(e => new TimelineEvent(
             e.EscalatedAt,
             "ESCALATION",
-            $"Escalated to {EscalationLevels.Name(e.ToLevel)} (level {e.ToLevel})",
+            $"Escalated to {EscalationLevels.Name(e.ToLevel)}" + (e.ToDivisionName is null ? "" : $", {e.ToDivisionName}") + $" (level {e.ToLevel})",
             e.Reason,
             new EmployeeRef(e.EscalatedBy, e.EscalatedByName))));
         events.AddRange(c.Attachments.Select(a => new TimelineEvent(
@@ -465,35 +466,24 @@ public sealed class ComplaintService(
                 ? "A closed complaint cannot be escalated."
                 : "This complaint is already escalated beyond your office.");
 
-        var now = clock.GetUtcNow();
-        db.ComplaintEscalations.Add(new ComplaintEscalation
-        {
-            ComplaintId = c.Id, FromLevel = c.EscalationLevel, ToLevel = target, Reason = remarks,
-            EscalatedBy = user.EmployeeId, EscalatedByName = user.Name, EscalatedAt = now,
-        });
-        audit.Log("ESCALATE", Module, c.Id.ToString(), $"level {c.EscalationLevel}->{target}");
-        c.EscalationLevel = target;
-        c.UpdatedAt = now;
+        var from = c.EscalationLevel;
+        var step = await Escalation.EscalationStep.ApplyAsync(db, org, c, target, remarks, user.EmployeeId, user.Name, clock.GetUtcNow(), ct);
+        audit.Log("ESCALATE", Module, c.Id.ToString(), $"level {from}->{target}" + (step.ToDivisionCode is null ? "" : $" division={step.ToDivisionCode}"));
         await db.SaveChangesAsync(ct);
     }
 
     /// <summary>
     /// The level the caller may escalate this complaint to, or null. Escalation goes one step above the
     /// higher of the complaint's level and the caller's own office (Branch 1, RO 2, HO 3): a branch sends
-    /// it to its RO, an RO sends it to Head Office, and nobody escalates past Head Office.
+    /// it to its RO (or straight to Head Office when its category skips the RO), an RO sends it to Head
+    /// Office, and nobody escalates past Head Office.
     /// </summary>
     private int? NextEscalationLevel(Complaint c)
     {
         if (!ComplaintAccess.Can(user, c, Permissions.ComplaintEscalate) || c.ClosedAt is not null) return null;
-        int? own = user.ScopeLevel switch
-        {
-            ScopeLevel.Branch => EscalationLevels.Branch,
-            ScopeLevel.Region => EscalationLevels.RegionalOffice,
-            ScopeLevel.HeadOffice => EscalationLevels.HeadOffice,
-            _ => null,
-        };
+        var own = ComplaintRouting.LevelOf(user);
         if (own is null || own < c.EscalationLevel) return null;
-        var target = Math.Max(c.EscalationLevel, own.Value) + 1;
+        var target = ComplaintRouting.NextLevel(Math.Max(c.EscalationLevel, own.Value), c.Category);
         return target <= EscalationLevels.Max ? target : null;
     }
 

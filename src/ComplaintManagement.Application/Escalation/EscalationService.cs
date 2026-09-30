@@ -1,4 +1,5 @@
 using ComplaintManagement.Application.Common.Interfaces;
+using ComplaintManagement.Application.Common.Security;
 using ComplaintManagement.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -12,7 +13,7 @@ public interface IEscalationService
     Task<int> RunAsync(CancellationToken ct);
 }
 
-public sealed class EscalationService(IApplicationDbContext db, TimeProvider clock, ILogger<EscalationService> logger) : IEscalationService
+public sealed class EscalationService(IApplicationDbContext db, IIamOrganisationService org, TimeProvider clock, ILogger<EscalationService> logger) : IEscalationService
 {
     public const string SystemActor = "SYSTEM";
     private const int BatchSize = 200;
@@ -24,7 +25,8 @@ public sealed class EscalationService(IApplicationDbContext db, TimeProvider clo
 
         var now = clock.GetUtcNow();
         var total = 0;
-        // Highest level first, so a long-overdue complaint jumps straight to Head Office.
+        // Highest level first, so a long-overdue complaint jumps straight to Head Office. Categories routed
+        // straight to Head Office go there at the Regional Office threshold.
         foreach (var (level, days) in new[]
                  {
                      (EscalationLevels.HeadOffice, settings.ToHeadOfficeAfterDays),
@@ -35,6 +37,7 @@ public sealed class EscalationService(IApplicationDbContext db, TimeProvider clo
             while (!ct.IsCancellationRequested)
             {
                 var batch = await db.Complaints
+                    .Include(c => c.Category)
                     // Resolved complaints are only waiting to be closed, so they are not escalated.
                     .Where(c => c.ClosedAt == null && c.ResolvedAt == null && c.SlaDueDate != null
                         && c.SlaDueDate <= dueBefore && c.EscalationLevel < level)
@@ -47,18 +50,15 @@ public sealed class EscalationService(IApplicationDbContext db, TimeProvider clo
                 {
                     var overdueDays = Math.Max(0, (int)Math.Floor((now - c.SlaDueDate!.Value).TotalDays));
                     var reason = $"TAT exceeded by {overdueDays} day{(overdueDays == 1 ? "" : "s")}";
-                    db.ComplaintEscalations.Add(new ComplaintEscalation
-                    {
-                        ComplaintId = c.Id, FromLevel = c.EscalationLevel, ToLevel = level, Reason = reason,
-                        EscalatedBy = SystemActor, EscalatedByName = "Automatic escalation", EscalatedAt = now,
-                    });
+                    var target = level == EscalationLevels.RegionalOffice ? ComplaintRouting.NextLevel(c.EscalationLevel, c.Category) : level;
+                    var from = c.EscalationLevel;
+                    var step = await EscalationStep.ApplyAsync(db, org, c, target, reason, SystemActor, "Automatic escalation", now, ct);
                     db.AuditLogs.Add(new AuditLog
                     {
                         EmployeeId = SystemActor, Action = "ESCALATE", Module = "Complaint", RecordId = c.Id.ToString(),
-                        Details = $"level {c.EscalationLevel}->{level}: {reason}", CreatedAt = now,
+                        Details = $"level {from}->{target}" + (step.ToDivisionCode is null ? "" : $" division={step.ToDivisionCode}") + $": {reason}",
+                        CreatedAt = now,
                     });
-                    c.EscalationLevel = level;
-                    c.UpdatedAt = now;
                 }
                 await db.SaveChangesAsync(ct);
                 total += batch.Count;

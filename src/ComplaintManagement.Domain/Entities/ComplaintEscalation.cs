@@ -8,6 +8,9 @@ public class ComplaintEscalation : Entity
     public Guid ComplaintId { get; set; }
     public int FromLevel { get; set; }
     public int ToLevel { get; set; }
+    /// <summary>The division it was routed to, if the category names one.</summary>
+    public string? ToDivisionCode { get; set; }
+    public string? ToDivisionName { get; set; }
     public required string Reason { get; set; }
     /// <summary>Employee code, or "SYSTEM" for automatic escalation.</summary>
     public required string EscalatedBy { get; set; }

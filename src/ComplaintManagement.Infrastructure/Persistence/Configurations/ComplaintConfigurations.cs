@@ -36,6 +36,8 @@ internal sealed class ComplaintConfiguration : IEntityTypeConfiguration<Complain
         b.Property(x => x.LodgedByEmployeeId).HasMaxLength(32);
         b.Property(x => x.LodgedByName).HasMaxLength(150);
         b.Property(x => x.LodgedByOfficeName).HasMaxLength(150);
+        b.Property(x => x.EscalatedDivisionCode).HasMaxLength(50);
+        b.Property(x => x.EscalatedDivisionName).HasMaxLength(150);
 
         b.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne(x => x.Status).WithMany().HasForeignKey(x => x.StatusCode).OnDelete(DeleteBehavior.Restrict);
@@ -177,6 +179,8 @@ internal sealed class ComplaintEscalationConfiguration : IEntityTypeConfiguratio
         b.Property(x => x.Reason).HasMaxLength(4000);
         b.Property(x => x.EscalatedBy).HasMaxLength(32);
         b.Property(x => x.EscalatedByName).HasMaxLength(150);
+        b.Property(x => x.ToDivisionCode).HasMaxLength(50);
+        b.Property(x => x.ToDivisionName).HasMaxLength(150);
         b.HasIndex(x => new { x.ComplaintId, x.EscalatedAt });
     }
 }

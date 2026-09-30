@@ -26,15 +26,22 @@ public static class ComplaintAccess
         complaint.AssignedEmployeeId is not null
         && string.Equals(complaint.AssignedEmployeeId, user.EmployeeId, StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// A role counts only outside a routed division's hold: once a complaint is escalated to a division of the
+    /// user's office level, only that division's staff (or the assignee) act on it.
+    /// </summary>
     public static bool Can(ICurrentUser user, Complaint complaint, string permission) =>
-        user.HasPermission(permission) || (Delegated.Contains(permission) && IsAssignee(user, complaint));
+        (user.HasPermission(permission) && (permission == Permissions.ComplaintView || !ComplaintRouting.OutsideRoutedDivision(user, complaint)))
+        || (Delegated.Contains(permission) && IsAssignee(user, complaint));
 
     public static void Demand(ICurrentUser user, Complaint complaint, string permission)
     {
         if (!Can(user, complaint, permission))
-            throw new ForbiddenAccessException(permission == Permissions.ComplaintAssign
-                ? "Only the office head can assign or reassign this complaint."
-                : "You can view this complaint, but only the office head or the person it is assigned to can act on it.");
+            throw new ForbiddenAccessException(ComplaintRouting.OutsideRoutedDivision(user, complaint)
+                ? $"This complaint has been escalated to the {complaint.EscalatedDivisionName ?? complaint.EscalatedDivisionCode} division, which handles it."
+                : permission == Permissions.ComplaintAssign
+                    ? "Only the office head can assign or reassign this complaint."
+                    : "You can view this complaint, but only the office head or the person it is assigned to can act on it.");
     }
 
     public static ComplaintAbilities Abilities(ICurrentUser user, Complaint complaint, bool canEscalate, bool canAssign) => new(
